@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}Lançamentos Diários{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Central de Lançamentos</h1>
+    </div>
+
+    {% if not parametro %}
+        <div class="alert alert-warning" role="alert">
+            Você precisa <a href="{{ url_for('main.cadastro') }}" class="alert-link">cadastrar os parâmetros</a> do veículo antes de fazer lançamentos.
+        </div>
+    {% else %}
+        <!-- Navegação em Abas -->
+        <ul class="nav nav-tabs" id="lancamentoTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="desempenho-tab" data-bs-toggle="tab" data-bs-target="#desempenho" type="button" role="tab" aria-controls="desempenho" aria-selected="true">Desempenho do Dia</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="custos-tab" data-bs-toggle="tab" data-bs-target="#custos" type="button" role="tab" aria-controls="custos" aria-selected="false">Lançar Custos Avulsos</button>
+            </li>
+        </ul>
+
+        <!-- Conteúdo das Abas -->
+        <div class="tab-content" id="lancamentoTabsContent">
+            <!-- Aba 1: Desempenho -->
+            <div class="tab-pane fade show active" id="desempenho" role="tabpanel" aria-labelledby="desempenho-tab">
+                <div class="card card-body bg-light border-top-0 rounded-bottom">
+                    <h5 class="card-title mt-2">Registre seu Desempenho</h5>
+                    <p class="card-text">Informe os KMs rodados e o faturamento do dia.</p>
+                    <form method="POST">
+                        <input type="hidden" name="form_type" value="desempenho">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label for="data_desempenho" class="form-label">Data</label>
+                                <input type="date" class="form-control" id="data_desempenho" name="data" value="{{ hoje }}" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="kmRodado" class="form-label">KM Rodados no Dia</label>
+                                <input type="number" class="form-control" id="kmRodado" name="kmRodado" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="faturamento" class="form-label">Faturamento do Dia (R$)</label>
+                                <input type="number" step="0.01" class="form-control" id="faturamento" name="faturamento" required>
+                            </div>
+                        </div>
+                        <div class="d-grid gap-2 mt-4">
+                            <button type="submit" class="btn btn-primary">Salvar Desempenho</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Aba 2: Custos Avulsos -->
+            <div class="tab-pane fade" id="custos" role="tabpanel" aria-labelledby="custos-tab">
+                <div class="card card-body bg-light border-top-0 rounded-bottom">
+                    <h5 class="card-title mt-2">Adicione Custos Variáveis</h5>
+                    <p class="card-text">Lance despesas como alimentação, pedágios, etc.</p>
+                    <form method="POST">
+                        <input type="hidden" name="form_type" value="custo">
+                        <div class="row mb-3">
+                             <div class="col-md-4">
+                                <label for="data_custo" class="form-label">Data do Custo</label>
+                                <input type="date" class="form-control" id="data_custo" name="data" value="{{ hoje }}" required>
+                            </div>
+                        </div>
+                        
+                        <div id="custos-container">
+                            <!-- Custo 1 -->
+                            <div class="row g-3 align-items-end mb-3 custo-row">
+                                <div class="col-md-4">
+                                    <label class="form-label">Descrição</label>
+                                    <input type="text" class="form-control" name="custoDescricao" placeholder="Ex: Almoço">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Categoria</label>
+                                    <select class="form-select" name="custoCategoria">
+                                        <option selected disabled value="">Selecione...</option>
+                                        {% for cat in categorias %}
+                                        <option value="{{ cat.id }}">{{ cat.nome }}</option>
+                                        {% endfor %}
+                                        <option value="add_new_category">-- Adicionar Nova --</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Valor (R$)</label>
+                                    <input type="number" step="0.01" class="form-control" name="custoValor">
+                                </div>
+                                <div class="col-md-1">
+                                    <button type="button" class="btn btn-danger btn-sm remove-custo" disabled>X</button>
+                                </div>
+                                <div class="col-12 new-category-input" style="display: none;">
+                                    <input type="text" class="form-control mt-2" name="newCategoryName" placeholder="Nome da Nova Categoria">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-3">
+                            <button type="button" id="add-custo-btn" class="btn btn-success btn-sm">+ Adicionar outro Custo</button>
+                        </div>
+
+                        <div class="d-grid gap-2 mt-4">
+                            <button type="submit" class="btn btn-primary">Salvar Custos</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    
+    function handleCategoryChange(selectElement) {
+        const newCategoryInput = selectElement.closest('.custo-row').querySelector('.new-category-input');
+        if (selectElement.value === 'add_new_category') {
+            newCategoryInput.style.display = 'block';
+            newCategoryInput.querySelector('input').setAttribute('required', 'required');
+        } else {
+            newCategoryInput.style.display = 'none';
+            newCategoryInput.querySelector('input').removeAttribute('required');
+        }
+    }
+
+    function addRemoveButtonLogic(container) {
+        const rows = container.querySelectorAll('.custo-row');
+        rows.forEach((row, index) => {
+            const removeBtn = row.querySelector('.remove-custo');
+            if(rows.length > 1) {
+                removeBtn.removeAttribute('disabled');
+            } else {
+                removeBtn.setAttribute('disabled', 'disabled');
+            }
+            removeBtn.onclick = function() {
+                row.remove();
+                addRemoveButtonLogic(container); // Re-evaluate buttons after removal
+            };
+        });
+    }
+
+    const custosContainer = document.getElementById('custos-container');
+    
+    document.getElementById('add-custo-btn').addEventListener('click', function() {
+        const firstCustoRow = custosContainer.querySelector('.custo-row');
+        const newRow = firstCustoRow.cloneNode(true);
+        
+        // Limpar valores e resetar campos
+        newRow.querySelector('input[name="custoDescricao"]').value = '';
+        newRow.querySelector('input[name="custoValor"]').value = '';
+        newRow.querySelector('select[name="custoCategoria"]').selectedIndex = 0;
+        const newCategoryDiv = newRow.querySelector('.new-category-input');
+        newCategoryDiv.style.display = 'none';
+        newCategoryDiv.querySelector('input').value = '';
+        newCategoryDiv.querySelector('input').removeAttribute('required');
+
+        custosContainer.appendChild(newRow);
+        
+        // Adicionar event listener para a nova linha
+        const newSelect = newRow.querySelector('select[name="custoCategoria"]');
+        newSelect.addEventListener('change', () => handleCategoryChange(newSelect));
+        
+        addRemoveButtonLogic(custosContainer);
+    });
+
+    // Adicionar event listener inicial
+    custosContainer.querySelectorAll('select[name="custoCategoria"]').forEach(select => {
+        select.addEventListener('change', () => handleCategoryChange(select));
+    });
+
+    addRemoveButtonLogic(custosContainer); // Initial check
+});
+</script>
+{% endblock %}

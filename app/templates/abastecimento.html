@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}Lançar Abastecimento{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Lançar Abastecimento</h1>
+        <a href="{{ url_for('main.index') }}" class="btn btn-sm btn-outline-secondary">Voltar</a>
+    </div>
+
+    {% if not parametro %}
+        <div class="alert alert-warning" role="alert">
+            Você precisa <a href="{{ url_for('main.cadastro') }}" class="alert-link">cadastrar os parâmetros</a> do veículo antes de lançar um abastecimento.
+        </div>
+    {% else %}
+        <form method="POST" id="abastecimento-form">
+            <div class="row g-3">
+                <!-- KM Atual -->
+                <div class="col-md-6">
+                    <label for="kmAtual" class="form-label">KM Atual do Veículo</label>
+                    <input type="number" class="form-control" id="kmAtual" name="kmAtual" value="{{ parametro.km_atual }}" required>
+                </div>
+
+                <!-- Data do Abastecimento -->
+                <div class="col-md-6">
+                    <label for="data" class="form-label">Data do Abastecimento</label>
+                    <input type="date" class="form-control" id="data" name="data" value="{{ hoje }}" required>
+                </div>
+
+                <hr class="my-4">
+
+                <h5 class="mb-3">Detalhes do Custo</h5>
+
+                <!-- Preço por Litro -->
+                <div class="col-md-4">
+                    <label for="precoPorLitro" class="form-label">Preço por Litro (R$)</label>
+                    <input type="number" step="0.001" class="form-control" id="precoPorLitro" name="precoPorLitro">
+                </div>
+
+                <!-- Litros -->
+                <div class="col-md-4">
+                    <label for="litros" class="form-label">Litros (L)</label>
+                    <input type="number" step="0.01" class="form-control" id="litros" name="litros">
+                </div>
+
+                <!-- Custo Total -->
+                <div class="col-md-4">
+                    <label for="custoTotal" class="form-label">Custo Total (R$)</label>
+                    <input type="number" step="0.01" class="form-control" id="custoTotal" name="custoTotal">
+                </div>
+
+                <hr class="my-4">
+
+                <!-- Tipo de Combustível -->
+                <div class="col-md-6">
+                    <label for="tipoCombustivel" class="form-label">Tipo de Combustível</label>
+                    <select class="form-select" id="tipoCombustivel" name="tipoCombustivel" required>
+                        <option value="" disabled selected>Selecione...</option>
+                        {% for tipo in tipos_combustivel %}
+                            <option value="{{ tipo.id }}">{{ tipo.nome }}</option>
+                        {% endfor %}
+                        <option value="add_new_combustivel">+ Adicionar Novo...</option>
+                    </select>
+                </div>
+                
+                <!-- Campo para Novo Tipo de Combustível -->
+                <div class="col-md-6" id="new-combustivel-div" style="display: none;">
+                    <label for="newCombustivelName" class="form-label">Nome do Novo Combustível</label>
+                    <input type="text" class="form-control" id="newCombustivelName" name="newCombustivelName">
+                </div>
+
+                <!-- Opções de Abastecimento -->
+                <div class="col-12 mt-4">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="tanqueCheio" name="tanqueCheio">
+                        <label class="form-check-label" for="tanqueCheio">Tanque Cheio</label>
+                    </div>
+                </div>
+
+                <!-- Autonomia Restante (Opcional) -->
+                <div class="col-md-6 mt-3">
+                    <label for="autonomiaRestante" class="form-label">Autonomia Restante (Opcional)</label>
+                    <div class="input-group">
+                        <input type="number" class="form-control" id="autonomiaRestante" name="autonomiaRestante" placeholder="Ex: 125">
+                        <span class="input-group-text">KM</span>
+                    </div>
+                    <div class="form-text">Informe a autonomia que o painel do carro mostrava *antes* de abastecer.</div>
+                </div>
+            </div>
+
+            <div class="d-grid gap-2 mt-4">
+                <button type="submit" class="btn btn-primary btn-lg">Salvar Abastecimento</button>
+            </div>
+        </form>
+    {% endif %}
+</div>
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/abastecimento.js') }}"></script>
+{% endblock %}
+
+{% endblock %}

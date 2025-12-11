@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Dashboard</h1>
+    </div>
+
+    {% if not parametro %}
+        <div class="alert alert-warning" role="alert">
+            <strong>Bem-vindo!</strong> Parece que é sua primeira vez aqui. <a href="{{ url_for('main.cadastro') }}" class="alert-link">Comece cadastrando os parâmetros</a> do seu veículo e suas metas.
+        </div>
+    {% else %}
+        <div class="row">
+            <!-- Card Principal: Meta do Dia -->
+            <div class="col-lg-8 mb-4">
+                <div class="card text-center border-primary shadow-sm">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Meta de Performance para Hoje</h5>
+                    </div>
+                    <div class="card-body">
+                        <h2 class="card-title display-4">R$ {{ "%.2f"|format(meta_diaria_ajustada) }}</h2>
+                        <p class="card-text text-muted">Valor ajustado para hoje com base no seu progresso neste mês para atingir sua meta.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card Lateral: Informações do Veículo -->
+            <div class="col-lg-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0">Veículo</h5>
+                    </div>
+                    <div class="card-body d-flex flex-column justify-content-between">
+                        <div>
+                            <h5 class="card-title">{{ parametro.modelo_carro }}</h5>
+                            <p class="card-text mb-1"><strong>Placa:</strong> {{ parametro.placa_carro }}</p>
+                        </div>
+                        <a href="{{ url_for('main.cadastro') }}" class="btn btn-sm btn-outline-secondary w-100 mt-3">Editar Parâmetros</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cards de Resumo 2x2 -->
+        <div class="row">
+            <!-- Meta do Mês -->
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">Meta do Mês ({{ parametro.tipo_meta.capitalize() }})</h5>
+                        <p class="card-text display-6 fw-bold text-primary">R$ {{ "%.2f"|format(meta_mensal_objetivo) }}</p>
+                        <small class="text-muted">Seu objetivo final para este mês, com base nos seus parâmetros.</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Projeção Lucro Operacional -->
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">Projeção Lucro Operacional</h5>
+                        <p class="card-text display-6 fw-bold text-success">R$ {{ "%.2f"|format(previsao_lucro_operacional_mes) }}</p>
+                        <small class="text-muted">Estimativa do que sobrará (Faturamento - Custos Variáveis) para pagar suas contas fixas e ter seu lucro.</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Saldo Atual -->
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">Saldo Atual</h5>
+                        <p class="card-text display-6 fw-bold {% if saldo_mes >= 0 %}text-success{% else %}text-danger{% endif %}">R$ {{ "%.2f"|format(saldo_mes) }}</p>
+                        <small class="text-muted">Sua diferença (positiva ou negativa) em relação à meta acumulada até hoje.</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Progresso Realizado -->
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">Faturamento Bruto</h5>
+                        <p class="card-text display-6 fw-bold">R$ {{ "%.2f"|format(faturamento_realizado_mes) }}</p>
+                        <small class="text-muted">Total faturado desde o início do mês.</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Extrato Diário -->
+        <div class="accordion mt-2" id="extratoAccordion">
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="headingOne">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne" aria-expanded="false" aria-controls="collapseOne">
+                        <strong>Extrato Detalhado do Mês</strong>
+                    </button>
+                </h2>
+                <div id="collapseOne" class="accordion-collapse collapse" aria-labelledby="headingOne" data-bs-parent="#extratoAccordion">
+                    <div class="accordion-body p-0">
+                        <ul class="list-group list-group-flush">
+                            {% for dia in extrato_diario %}
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong>{{ dia.data.strftime('%d/%m') }}</strong> ({{ dia.data.strftime('%a') }})
+                                    <small class="d-block text-muted">
+                                        Meta do Dia: R$ {{ "%.2f"|format(dia.meta_esperada) }}
+                                    </small>
+                                </div>
+                                <div class="text-end">
+                                    <span class="fs-6 fw-bold {% if dia.performance > 0 %}text-dark{% else %}text-muted{% endif %}">
+                                        Realizado: R$ {{ "%.2f"|format(dia.performance) }}
+                                    </span>
+                                    <span class="d-block fs-6 fw-bold {% if dia.saldo >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                        Saldo do Dia: R$ {{ "%.2f"|format(dia.saldo) }}
+                                    </span>
+                                </div>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

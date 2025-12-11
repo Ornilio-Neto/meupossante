@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}Parâmetros do Veículo{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="mb-4">Parâmetros e Custos Fixos</h1>
+    <p class="text-muted">Insira as informações do seu veículo, suas metas e todos os custos que você tem regularmente, independentemente de rodar com o carro (ex: seguro, parcelas, impostos).</p>
+    
+    <form method="POST" class="mt-4">
+        <h4>Informações do Veículo</h4>
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <label for="modeloCarro" class="form-label">Modelo do Carro</label>
+                <input type="text" class="form-control" id="modeloCarro" name="modeloCarro" value="{{ parametro.modelo_carro if parametro else '' }}" required>
+            </div>
+            <div class="col-md-6">
+                <label for="placaCarro" class="form-label">Placa</label>
+                <input type="text" class="form-control" id="placaCarro" name="placaCarro" value="{{ parametro.placa_carro if parametro else '' }}" required>
+            </div>
+        </div>
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <label for="kmAtual" class="form-label">KM Atual</label>
+                <input type="number" class="form-control" id="kmAtual" name="kmAtual" value="{{ parametro.km_atual if parametro else '' }}" required>
+            </div>
+            <div class="col-md-6">
+                <label for="mediaConsumo" class="form-label">Média de Consumo (KM/L)</label>
+                <input type="number" step="0.1" class="form-control" id="mediaConsumo" name="mediaConsumo" value="{{ parametro.media_consumo if parametro else '' }}" required>
+            </div>
+        </div>
+
+        <h4>Metas e Planejamento</h4>
+        <div class="row mb-3">
+            <div class="col-md-4">
+                <label for="metaFaturamento" class="form-label">Meta de Faturamento (R$)</label>
+                <input type="number" step="100" class="form-control" id="metaFaturamento" name="metaFaturamento" value="{{ parametro.meta_faturamento if parametro else '' }}" required>
+            </div>
+            <div class="col-md-4">
+                <label for="periodicidadeMeta" class="form-label">Periodicidade da Meta</label>
+                <select class="form-select" id="periodicidadeMeta" name="periodicidadeMeta" required>
+                    <option value="diaria" {{ 'selected' if parametro and parametro.periodicidade_meta == 'diaria' }}>Diária</option>
+                    <option value="semanal" {{ 'selected' if parametro and parametro.periodicidade_meta == 'semanal' }}>Semanal</option>
+                    <option value="mensal" {{ 'selected' if parametro and parametro.periodicidade_meta == 'mensal' }}>Mensal</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label for="tipoMeta" class="form-label">Tipo da Meta</label>
+                <select class="form-select" id="tipoMeta" name="tipoMeta" required>
+                    <option value="bruta" {{ 'selected' if parametro and parametro.tipo_meta == 'bruta' }}>Bruta</option>
+                    <option value="liquida" {{ 'selected' if parametro and parametro.tipo_meta == 'liquida' }}>Líquida</option>
+                </select>
+            </div>
+        </div>
+        <div class="row mb-4">
+             <div class="col-md-4">
+                <label for="diasTrabalhoSemana" class="form-label">Dias de Trabalho por Semana</label>
+                <select class="form-select" id="diasTrabalhoSemana" name="diasTrabalhoSemana" required>
+                    {% for i in range(1, 8) %}
+                    <option value="{{ i }}" {{ 'selected' if parametro and parametro.dias_trabalho_semana == i else '' }}>{{ i }} dia(s)</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <hr class="my-4">
+
+        <h4>Custos Fixos Mensais</h4>
+        <div id="custosFixosContainer">
+            {% if parametro and parametro.custos_fixos %}
+                {% for custo in parametro.custos_fixos %}
+                <div class="input-group mb-3">
+                    <input type="text" class="form-control" name="custoNome" placeholder="Nome do Custo" value="{{ custo.nome }}" required>
+                    <span class="input-group-text">R$</span>
+                    <input type="number" step="0.01" class="form-control" name="custoValor" placeholder="Valor Mensal" value="{{ custo.valor }}" required>
+                    <button class="btn btn-outline-danger" type="button" onclick="this.parentElement.remove()">Remover</button>
+                </div>
+                {% endfor %}
+            {% endif %}
+        </div>
+        <button type="button" class="btn btn-outline-primary" id="addCustoFixoBtn">Adicionar Custo Fixo</button>
+        
+        <hr class="my-4">
+
+        <button type="submit" class="btn btn-primary w-100">Salvar Parâmetros e Custos</button>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.getElementById('addCustoFixoBtn').addEventListener('click', function() {
+        const container = document.getElementById('custosFixosContainer');
+        const newCustoDiv = document.createElement('div');
+        newCustoDiv.classList.add('input-group', 'mb-3');
+        newCustoDiv.innerHTML = `
+            <input type="text" class="form-control" name="custoNome" placeholder="Nome do Custo" required>
+            <span class="input-group-text">R$</span>
+            <input type="number" step="0.01" class="form-control" name="custoValor" placeholder="Valor Mensal" required>
+            <button class="btn btn-outline-danger" type="button" onclick="this.parentElement.remove()">Remover</button>
+        `;
+        container.appendChild(newCustoDiv);
+    });
+</script>
+{% endblock %}
