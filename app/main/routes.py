@@ -1,8 +1,12 @@
 from flask import render_template, request, redirect, url_for, flash
 from datetime import datetime, timedelta
 import calendar
+import locale
 from . import bp as main
 from ..models import db, Parametros, CustoFixo, CategoriaCusto, LancamentoDiario, CustoVariavel, Abastecimento, TipoCombustivel
+
+# Configura o locale para Português do Brasil
+locale.setlocale(locale.LC_TIME, 'pt_BR.UTF-8')
 
 @main.route("/", methods=['GET', 'POST'])
 def index():
@@ -38,11 +42,15 @@ def index():
 
             custos_adicionados = 0
             for i in range(len(custo_valores)):
-                if not custo_valores[i] or not custo_descricoes[i] or not custo_categorias[i]:
+                valor_custo_str = custo_valores[i].strip()
+                if not valor_custo_str or not custo_categorias[i]:
                     continue
-
+                
+                descricao_custo = custo_descricoes[i].strip()
+                categoria_id_str = custo_categorias[i]
+                
                 categoria_id_final = None
-                if custo_categorias[i] == 'add_new_category':
+                if categoria_id_str == 'add_new_category':
                     nome_nova_categoria = new_category_names[i].strip()
                     if nome_nova_categoria:
                         categoria_existente = CategoriaCusto.query.filter(db.func.lower(CategoriaCusto.nome) == db.func.lower(nome_nova_categoria)).first()
@@ -53,13 +61,13 @@ def index():
                             db.session.add(nova_categoria_obj)
                             db.session.flush()
                             categoria_id_final = nova_categoria_obj.id
-                else:
-                    categoria_id_final = int(custo_categorias[i])
+                elif categoria_id_str.isdigit():
+                    categoria_id_final = int(categoria_id_str)
 
                 if categoria_id_final:
                     novo_custo_variavel = CustoVariavel(
-                        descricao=custo_descricoes[i],
-                        valor=float(custo_valores[i]),
+                        descricao=descricao_custo if descricao_custo else 'Custo sem descrição',
+                        valor=float(valor_custo_str),
                         categoria_id=categoria_id_final,
                         lancamento=lancamento_diario
                     )
@@ -87,23 +95,15 @@ def abastecimento():
         return redirect(url_for('main.cadastro'))
 
     if request.method == 'POST':
-        # --- 1. CAPTURA E CONVERSÃO DOS DADOS ---
         data_obj = datetime.strptime(request.form.get('data'), '%Y-%m-%d').date()
         km_atual = int(request.form.get('kmAtual'))
         preco_por_litro = float(request.form.get('precoPorLitro') or 0)
         litros = float(request.form.get('litros') or 0)
         custo_total = float(request.form.get('custoTotal') or 0)
         tanque_cheio = 'tanqueCheio' in request.form
-        autonomia_restante = int(request.form.get('autonomiaRestante') or 0)
         tipo_combustivel_id_str = request.form.get('tipoCombustivel')
         novo_nome_combustivel = request.form.get('newCombustivelName', '').strip()
 
-        # --- 2. VALIDAÇÃO DOS DADOS ---
-        if km_atual <= parametro.km_atual:
-            flash(f'O KM atual ({km_atual} km) deve ser maior que o último KM registrado ({parametro.km_atual} km).', 'danger')
-            return redirect(url_for('main.abastecimento'))
-
-        # --- 3. CÁLCULO DOS CAMPOS DE CUSTO ---
         if preco_por_litro > 0 and litros > 0:
             custo_total = round(preco_por_litro * litros, 2)
         elif custo_total > 0 and preco_por_litro > 0:
@@ -114,9 +114,7 @@ def abastecimento():
             flash('Preencha pelo menos dois dos três campos de custo (Preço/Litro, Litros, Custo Total).', 'danger')
             return redirect(url_for('main.abastecimento'))
         
-        # --- 4. GERENCIAMENTO DO TIPO DE COMBUSTÍVEL ---
         tipo_combustivel_id_final = None
-        nome_combustivel_final = ''
         if tipo_combustivel_id_str == 'add_new_combustivel':
             if not novo_nome_combustivel:
                 flash('Digite o nome do novo tipo de combustível.', 'danger')
@@ -125,84 +123,49 @@ def abastecimento():
             existente = TipoCombustivel.query.filter(db.func.lower(TipoCombustivel.nome) == db.func.lower(novo_nome_combustivel)).first()
             if existente:
                 tipo_combustivel_id_final = existente.id
-                nome_combustivel_final = existente.nome
             else:
                 novo_tipo_obj = TipoCombustivel(nome=novo_nome_combustivel)
                 db.session.add(novo_tipo_obj)
                 db.session.flush()
                 tipo_combustivel_id_final = novo_tipo_obj.id
-                nome_combustivel_final = novo_tipo_obj.nome
         else:
             tipo_combustivel_id_final = int(tipo_combustivel_id_str)
-            tipo_comb_obj = TipoCombustivel.query.get(tipo_combustivel_id_final)
-            nome_combustivel_final = tipo_comb_obj.nome
 
-        # --- 5. CÁLCULO DE CONSUMO (SE TANQUE CHEIO) ---
-        nova_media_calculada = None
-        if tanque_cheio:
-            ultimo_tanque_cheio = Abastecimento.query.filter_by(parametro_id=parametro.id, tanque_cheio=True).order_by(Abastecimento.data.desc(), Abastecimento.id.desc()).first()
-            if ultimo_tanque_cheio:
-                km_rodados = km_atual - ultimo_tanque_cheio.km_atual
-                litros_consumidos = Abastecimento.query.with_entities(db.func.sum(Abastecimento.litros)).filter(
-                    Abastecimento.parametro_id == parametro.id,
-                    Abastecimento.data > ultimo_tanque_cheio.data
-                ).scalar() or 0
-                litros_consumidos += litros # Adiciona os litros do abastecimento atual
-
-                if litros_consumidos > 0:
-                    nova_media_calculada = km_rodados / litros_consumidos
-                    parametro.media_consumo = nova_media_calculada
-
-        # --- 6. CRIAÇÃO DO REGISTRO DE ABASTECIMENTO ---
         novo_abastecimento = Abastecimento(
-            data=data_obj,
-            km_atual=km_atual,
-            litros=litros,
-            preco_por_litro=preco_por_litro,
-            custo_total=custo_total,
-            tanque_cheio=tanque_cheio,
-            autonomia_restante=autonomia_restante if autonomia_restante > 0 else None,
-            tipo_combustivel_id=tipo_combustivel_id_final,
+            data=data_obj, km_atual=km_atual, litros=litros, preco_por_litro=preco_por_litro,
+            custo_total=custo_total, tanque_cheio=tanque_cheio, tipo_combustivel_id=tipo_combustivel_id_final,
             parametro_id=parametro.id
         )
         db.session.add(novo_abastecimento)
-
-        # --- 7. ATUALIZAÇÃO DO KM DO VEÍCULO ---
-        parametro.km_atual = km_atual
-
-        # --- 8. INTEGRAÇÃO COM CUSTOS VARIÁVEIS ---
-        categoria_combustivel = CategoriaCusto.query.filter(db.func.lower(CategoriaCusto.nome) == 'combustível').first()
-        if not categoria_combustivel:
-            categoria_combustivel = CategoriaCusto(nome='Combustível')
-            db.session.add(categoria_combustivel)
-            db.session.flush()
-
-        lancamento_diario = LancamentoDiario.query.filter_by(data=data_obj, parametro_id=parametro.id).first()
-        if not lancamento_diario:
-            lancamento_diario = LancamentoDiario(data=data_obj, km_rodado=0, faturamento=0, parametro_id=parametro.id)
-            db.session.add(lancamento_diario)
-        
-        custo_abastecimento = CustoVariavel(
-            descricao=f'Abastecimento - {nome_combustivel_final}',
-            valor=custo_total,
-            categoria_id=categoria_combustivel.id,
-            lancamento=lancamento_diario
-        )
-        db.session.add(custo_abastecimento)
-
-        # --- 9. COMMIT E FEEDBACK ---
         db.session.commit()
-        
-        mensagem_flash = f'Abastecimento de {litros:.2f}L (R$ {custo_total:.2f}) salvo com sucesso!'
-        if nova_media_calculada:
-            mensagem_flash += f' Nova média de consumo calculada: {nova_media_calculada:.2f} km/L.'
-        
-        flash(mensagem_flash, 'success')
-        return redirect(url_for('main.dashboard'))
+        recalcular_medias(parametro.id)
+        db.session.commit()
+        flash(f'Abastecimento de {litros:.2f}L salvo com sucesso!', 'success')
+        return redirect(url_for('main.abastecimento'))
 
+    # LÓGICA GET CORRIGIDA PARA CALCULAR A MÉDIA
     tipos_combustivel = TipoCombustivel.query.order_by(TipoCombustivel.nome).all()
     hoje = (datetime.utcnow() - timedelta(hours=3)).strftime('%Y-%m-%d')
-    return render_template('abastecimento.html', parametro=parametro, tipos_combustivel=tipos_combustivel, hoje=hoje)
+    historico_crescente = Abastecimento.query.filter_by(parametro_id=parametro.id).order_by(Abastecimento.data.asc(), Abastecimento.km_atual.asc()).all()
+
+    for i in range(len(historico_crescente)):
+        abastecimento_atual = historico_crescente[i]
+        abastecimento_atual.media_desde_anterior = None
+        if i > 0:
+            abastecimento_anterior = historico_crescente[i-1]
+            km_rodados = abastecimento_atual.km_atual - abastecimento_anterior.km_atual
+            litros_consumidos = abastecimento_atual.litros
+            if litros_consumidos > 0 and km_rodados > 0:
+                abastecimento_atual.media_desde_anterior = km_rodados / litros_consumidos
+
+    historico_final = list(reversed(historico_crescente))
+    
+    return render_template('abastecimento.html', 
+        parametro=parametro, 
+        tipos_combustivel=tipos_combustivel, 
+        hoje=hoje, 
+        historico=historico_final
+    )
 
 @main.route("/dashboard")
 def dashboard():
@@ -355,3 +318,52 @@ def cadastro():
         return redirect(url_for('main.dashboard'))
 
     return render_template('cadastro.html', parametro=parametro_existente)
+
+
+def recalcular_medias(parametro_id):
+    abastecimentos = Abastecimento.query.filter_by(parametro_id=parametro_id).order_by(Abastecimento.data, Abastecimento.km_atual).all()
+    parametro = Parametros.query.get(parametro_id)
+    
+    total_km_rodados = 0
+    total_litros_consumidos = 0
+
+    # Limpa todas as médias calculadas existentes
+    for abs in abastecimentos:
+        abs.media_consumo_calculada = None
+
+    tanques_cheios = sorted([abs for abs in abastecimentos if abs.tanque_cheio], key=lambda x: (x.data, x.km_atual))
+
+    for i in range(len(tanques_cheios) - 1):
+        inicio = tanques_cheios[i]
+        fim = tanques_cheios[i+1]
+
+        km_rodados_periodo = fim.km_atual - inicio.km_atual
+        
+        # Soma os litros de todos os abastecimentos (incluindo parciais) entre os dois tanques cheios.
+        # Não inclui o abastecimento inicial (inicio), mas inclui o final (fim).
+        litros_consumidos_periodo = sum(a.litros for a in abastecimentos if inicio.data < a.data <= fim.data and inicio.km_atual < a.km_atual <= fim.km_atual)
+
+        if litros_consumidos_periodo > 0:
+            media_periodo = km_rodados_periodo / litros_consumidos_periodo
+            fim.media_consumo_calculada = media_periodo
+            
+            total_km_rodados += km_rodados_periodo
+            total_litros_consumidos += litros_consumidos_periodo
+
+    if total_litros_consumidos > 0:
+        parametro.media_consumo = total_km_rodados / total_litros_consumidos
+    else:
+        # Se não há ciclos de tanque cheio, calcula uma média simples se houver dados
+        if len(abastecimentos) > 1:
+            primeiro = abastecimentos[0]
+            ultimo = abastecimentos[-1]
+            km_total = ultimo.km_atual - primeiro.km_atual
+            litros_total = sum(a.litros for a in abastecimentos) - primeiro.litros
+            if litros_total > 0:
+                parametro.media_consumo = km_total / litros_total
+
+    # Atualiza o KM mais recente no painel
+    if abastecimentos:
+        parametro.km_atual = max(a.km_atual for a in abastecimentos)
+    
+    db.session.commit()
