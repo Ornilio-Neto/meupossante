@@ -3,7 +3,9 @@ from datetime import datetime, timedelta
 import calendar
 import locale
 from . import bp as main
-from ..models import db, Parametros, CustoFixo, CategoriaCusto, LancamentoDiario, CustoVariavel, Abastecimento, TipoCombustivel
+# Substitua a linha de importação existente por esta:
+from ..models import db, Parametros, CustoFixo, CategoriaCusto, LancamentoDiario, CustoVariavel, Abastecimento, TipoCombustivel, Faturamento
+
 
 # Configura o locale para Português do Brasil
 locale.setlocale(locale.LC_TIME, 'pt_BR.UTF-8')
@@ -21,20 +23,53 @@ def index():
         data_str = request.form.get('data')
         data = datetime.strptime(data_str, '%Y-%m-%d').date()
 
-        # Busca ou cria o registro diário para a data informada
         lancamento_diario = LancamentoDiario.query.filter_by(data=data, parametro_id=parametro.id).first()
         if not lancamento_diario:
-            lancamento_diario = LancamentoDiario(data=data, km_rodado=0, faturamento=0, parametro_id=parametro.id)
+            lancamento_diario = LancamentoDiario(data=data, km_rodado=0, parametro_id=parametro.id)
             db.session.add(lancamento_diario)
 
-        # Se o formulário for de DESEMPENHO
         if form_type == 'desempenho':
             lancamento_diario.km_rodado = int(request.form.get('kmRodado') or 0)
-            lancamento_diario.faturamento = float(request.form.get('faturamento') or 0)
-            flash('Desempenho diário salvo com sucesso!', 'success')
+            
+            # Limpa faturamentos antigos antes de salvar os novos
+            Faturamento.query.filter_by(lancamento_id=lancamento_diario.id).delete()
+            
+            # Coleta os dados do formulário
+            valores = request.form.getlist('faturamentoValor')
+            tipos = request.form.getlist('faturamentoTipo')
+            fontes = request.form.getlist('faturamentoFonte')
+            fontes_outro = request.form.getlist('faturamentoFonteOutro')
 
-        # Se o formulário for de CUSTO
+            faturamentos_adicionados = 0
+            for i in range(len(valores)):
+                valor_str = valores[i].strip()
+                if not valor_str or float(valor_str) <= 0:
+                    continue
+                
+                valor = float(valor_str)
+                tipo = tipos[i]
+                
+                # LÓGICA CORRIGIDA: Captura a fonte independentemente do tipo
+                fonte_selecionada = fontes[i]
+                if fonte_selecionada == 'Outro':
+                    fonte_customizada = fontes_outro[i].strip()
+                    fonte_final = fonte_customizada if fonte_customizada else 'Outro'
+                else:
+                    fonte_final = fonte_selecionada
+
+                novo_faturamento = Faturamento(
+                    valor=valor,
+                    tipo=tipo,
+                    fonte=fonte_final,
+                    lancamento=lancamento_diario
+                )
+                db.session.add(novo_faturamento)
+                faturamentos_adicionados += 1
+
+            flash(f'Desempenho e {faturamentos_adicionados} fonte(s) de faturamento salvos com sucesso!', 'success')
+
         elif form_type == 'custo':
+            # A lógica de custo permanece inalterada
             custo_descricoes = request.form.getlist('custoDescricao')
             custo_categorias = request.form.getlist('custoCategoria')
             new_category_names = request.form.getlist('newCategoryName')
@@ -43,12 +78,9 @@ def index():
             custos_adicionados = 0
             for i in range(len(custo_valores)):
                 valor_custo_str = custo_valores[i].strip()
-                if not valor_custo_str or not custo_categorias[i]:
-                    continue
-                
+                if not valor_custo_str or not custo_categorias[i]: continue
                 descricao_custo = custo_descricoes[i].strip()
                 categoria_id_str = custo_categorias[i]
-                
                 categoria_id_final = None
                 if categoria_id_str == 'add_new_category':
                     nome_nova_categoria = new_category_names[i].strip()
@@ -82,10 +114,11 @@ def index():
         db.session.commit()
         return redirect(url_for('main.index'))
 
-    # Lógica para GET (carregar a página)
     categorias = CategoriaCusto.query.order_by(CategoriaCusto.nome).all()
     hoje = (datetime.utcnow() - timedelta(hours=3)).strftime('%Y-%m-%d')
     return render_template('index.html', parametro=parametro, categorias=categorias, hoje=hoje)
+
+
 
 @main.route("/abastecimento", methods=['GET', 'POST'])
 def abastecimento():
@@ -173,13 +206,11 @@ def dashboard():
     if not parametro:
         return render_template('dashboard.html', parametro=None)
 
-    # --- Cálculos Base ---
     total_custos_fixos = sum(c.valor for c in parametro.custos_fixos)
     hoje = datetime.utcnow().date()
     dias_no_mes = calendar.monthrange(hoje.year, hoje.month)[1]
     dias_uteis_no_mes_estimado = (dias_no_mes * (parametro.dias_trabalho_semana / 7))
 
-    # --- Cálculo da Meta Mensal Total ---
     meta_mensal_bruta = 0
     if parametro.periodicidade_meta == 'mensal':
         meta_mensal_bruta = parametro.meta_faturamento
@@ -194,7 +225,6 @@ def dashboard():
     if parametro.tipo_meta == 'liquida':
         meta_mensal_objetivo += total_custos_fixos 
 
-    # --- Desempenho Realizado no Mês ---
     primeiro_dia_mes = hoje.replace(day=1)
     lancamentos_mes = LancamentoDiario.query.filter(
         LancamentoDiario.parametro_id == parametro.id,
@@ -202,7 +232,8 @@ def dashboard():
         LancamentoDiario.data <= hoje
     ).all()
 
-    faturamento_realizado_mes = sum(l.faturamento for l in lancamentos_mes)
+    # ALTERAÇÃO AQUI
+    faturamento_realizado_mes = sum(l.faturamento_total for l in lancamentos_mes)
     km_rodados_mes = sum(l.km_rodado for l in lancamentos_mes)
     custos_variaveis_mes = sum(c.valor for l in lancamentos_mes for c in l.custos_variaveis)
     
@@ -210,7 +241,6 @@ def dashboard():
     if parametro.tipo_meta == 'liquida':
         desempenho_realizado_mes -= custos_variaveis_mes
 
-    # --- Cálculos para Metas e Saldos ---
     meta_diaria_base = (meta_mensal_objetivo / dias_uteis_no_mes_estimado) if dias_uteis_no_mes_estimado > 0 else 0
     dias_trabalhados_estimados_ate_ontem = (hoje.day - 1) * (parametro.dias_trabalho_semana / 7)
     desempenho_esperado_ate_ontem = meta_diaria_base * dias_trabalhados_estimados_ate_ontem
@@ -219,7 +249,6 @@ def dashboard():
     dias_uteis_restantes = (dias_no_mes - hoje.day + 1) * (parametro.dias_trabalho_semana / 7)
     meta_diaria_ajustada = (meta_restante / dias_uteis_restantes) if dias_uteis_restantes > 0 else meta_restante
 
-    # --- Projeções para o Mês ---
     previsao_faturamento_bruto_mes = 0
     previsao_lucro_operacional_mes = 0
     dias_com_lancamento_total = db.session.query(db.func.count(db.distinct(LancamentoDiario.data))).filter(LancamentoDiario.parametro_id == parametro.id, LancamentoDiario.data >= primeiro_dia_mes, LancamentoDiario.data <= hoje).scalar() or 0
@@ -232,7 +261,6 @@ def dashboard():
         previsao_custos_variaveis_mes = previsao_km_total_mes * custo_variavel_por_km
         previsao_lucro_operacional_mes = previsao_faturamento_bruto_mes - previsao_custos_variaveis_mes
 
-    # --- Geração do Extrato Diário ---
     extrato_diario = []
     lancamentos_por_data = {l.data: l for l in lancamentos_mes}
     dia_corrente = hoje
@@ -241,7 +269,8 @@ def dashboard():
         performance_dia = 0
         if lancamento:
             custos_variaveis_dia = sum(c.valor for c in lancamento.custos_variaveis)
-            performance_dia = lancamento.faturamento
+            # ALTERAÇÃO AQUI
+            performance_dia = lancamento.faturamento_total
             if parametro.tipo_meta == 'liquida':
                 performance_dia -= custos_variaveis_dia
         
@@ -267,6 +296,8 @@ def dashboard():
         extrato_diario=extrato_diario,
         meta_mensal_objetivo=meta_mensal_objetivo
     )
+
+
 
 @main.route("/categorias", methods=['GET', 'POST'])
 def categorias():

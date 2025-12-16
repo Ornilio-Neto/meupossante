@@ -2,6 +2,14 @@
 
 {% block title %}Lançamentos Diários{% endblock %}
 
+{% block styles %}
+<style>
+    .remove-btn {
+        height: calc(100% - 1.75rem); /* Alinha o botão X com os inputs */
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
@@ -13,7 +21,6 @@
             Você precisa <a href="{{ url_for('main.cadastro') }}" class="alert-link">cadastrar os parâmetros</a> do veículo antes de fazer lançamentos.
         </div>
     {% else %}
-        <!-- Navegação em Abas -->
         <ul class="nav nav-tabs" id="lancamentoTabs" role="tablist">
             <li class="nav-item" role="presentation">
                 <button class="nav-link active" id="desempenho-tab" data-bs-toggle="tab" data-bs-target="#desempenho" type="button" role="tab" aria-controls="desempenho" aria-selected="true">Desempenho do Dia</button>
@@ -23,29 +30,61 @@
             </li>
         </ul>
 
-        <!-- Conteúdo das Abas -->
         <div class="tab-content" id="lancamentoTabsContent">
             <!-- Aba 1: Desempenho -->
             <div class="tab-pane fade show active" id="desempenho" role="tabpanel" aria-labelledby="desempenho-tab">
                 <div class="card card-body bg-light border-top-0 rounded-bottom">
                     <h5 class="card-title mt-2">Registre seu Desempenho</h5>
-                    <p class="card-text">Informe os KMs rodados e o faturamento do dia.</p>
-                    <form method="POST">
+                    <p class="card-text">Informe os KMs rodados e detalhe as fontes de faturamento do dia.</p>
+                    <form method="POST" id="desempenhoForm">
                         <input type="hidden" name="form_type" value="desempenho">
-                        <div class="row g-3">
-                            <div class="col-md-4">
+                        
+                        <!-- Informações Gerais do Dia -->
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-6">
                                 <label for="data_desempenho" class="form-label">Data</label>
                                 <input type="date" class="form-control" id="data_desempenho" name="data" value="{{ hoje }}" required>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-6">
                                 <label for="kmRodado" class="form-label">KM Rodados no Dia</label>
                                 <input type="number" class="form-control" id="kmRodado" name="kmRodado" required>
                             </div>
-                            <div class="col-md-4">
-                                <label for="faturamento" class="form-label">Faturamento do Dia (R$)</label>
-                                <input type="number" step="0.01" class="form-control" id="faturamento" name="faturamento" required>
+                        </div>
+
+                        <!-- Seção Dinâmica de Faturamento -->
+                        <h6 class="mb-3">Fontes de Faturamento</h6>
+                        <div id="faturamento-container">
+                            <!-- Linha de Faturamento Modelo -->
+                            <div class="row g-3 align-items-end mb-3 faturamento-row">
+                                <div class="col-md-3">
+                                    <label class="form-label">Valor (R$)</label>
+                                    <input type="number" step="0.01" class="form-control" name="faturamentoValor" required>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Pagamento</label>
+                                    <select class="form-select" name="faturamentoTipo" required>
+                                        <option value="App" selected>App</option>
+                                        <option value="Especie">Espécie</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-5">
+                                    <div class="faturamento-source-wrapper">
+                                        <label class="form-label">Fonte</label>
+                                        <select class="form-select" name="faturamentoFonte">
+                                            <option value="Uber" selected>Uber</option>
+                                            <option value="99">99</option>
+                                            <option value="Outro">Outro</option>
+                                        </select>
+                                        <input type="text" class="form-control mt-2" name="faturamentoFonteOutro" placeholder="Especifique a fonte" style="display: none;">
+                                    </div>
+                                </div>
+                                <div class="col-md-1 d-flex align-items-end">
+                                    <button type="button" class="btn btn-danger btn-sm w-100 remove-faturamento" disabled>X</button>
+                                </div>
                             </div>
                         </div>
+                        <button type="button" id="add-faturamento-btn" class="btn btn-success btn-sm mt-2">+ Adicionar Faturamento</button>
+
                         <div class="d-grid gap-2 mt-4">
                             <button type="submit" class="btn btn-primary">Salvar Desempenho</button>
                         </div>
@@ -53,9 +92,9 @@
                 </div>
             </div>
 
-            <!-- Aba 2: Custos Avulsos -->
+            <!-- Aba 2: Custos -->
             <div class="tab-pane fade" id="custos" role="tabpanel" aria-labelledby="custos-tab">
-                <div class="card card-body bg-light border-top-0 rounded-bottom">
+                 <div class="card card-body bg-light border-top-0 rounded-bottom">
                     <h5 class="card-title mt-2">Adicione Custos Variáveis</h5>
                     <p class="card-text">Lance despesas como alimentação, pedágios, etc.</p>
                     <form method="POST">
@@ -68,7 +107,6 @@
                         </div>
                         
                         <div id="custos-container">
-                            <!-- Custo 1 -->
                             <div class="row g-3 align-items-end mb-3 custo-row">
                                 <div class="col-md-4">
                                     <label class="form-label">Descrição</label>
@@ -115,64 +153,77 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    
-    function handleCategoryChange(selectElement) {
-        const newCategoryInput = selectElement.closest('.custo-row').querySelector('.new-category-input');
-        if (selectElement.value === 'add_new_category') {
-            newCategoryInput.style.display = 'block';
-            newCategoryInput.querySelector('input').setAttribute('required', 'required');
-        } else {
-            newCategoryInput.style.display = 'none';
-            newCategoryInput.querySelector('input').removeAttribute('required');
-        }
-    }
-
-    function addRemoveButtonLogic(container) {
-        const rows = container.querySelectorAll('.custo-row');
-        rows.forEach((row, index) => {
-            const removeBtn = row.querySelector('.remove-custo');
-            if(rows.length > 1) {
-                removeBtn.removeAttribute('disabled');
-            } else {
-                removeBtn.setAttribute('disabled', 'disabled');
-            }
-            removeBtn.onclick = function() {
-                row.remove();
-                addRemoveButtonLogic(container); // Re-evaluate buttons after removal
-            };
+    // --- LÓGICA PARA CUSTOS (Existente) ---
+    function setupCustoRow(row) {
+        const select = row.querySelector('select[name="custoCategoria"]');
+        const newCategoryInput = row.querySelector('.new-category-input');
+        select.addEventListener('change', () => {
+            newCategoryInput.style.display = select.value === 'add_new_category' ? 'block' : 'none';
+            newCategoryInput.querySelector('input').required = select.value === 'add_new_category';
         });
     }
 
-    const custosContainer = document.getElementById('custos-container');
-    
-    document.getElementById('add-custo-btn').addEventListener('click', function() {
-        const firstCustoRow = custosContainer.querySelector('.custo-row');
-        const newRow = firstCustoRow.cloneNode(true);
-        
-        // Limpar valores e resetar campos
-        newRow.querySelector('input[name="custoDescricao"]').value = '';
-        newRow.querySelector('input[name="custoValor"]').value = '';
-        newRow.querySelector('select[name="custoCategoria"]').selectedIndex = 0;
-        const newCategoryDiv = newRow.querySelector('.new-category-input');
-        newCategoryDiv.style.display = 'none';
-        newCategoryDiv.querySelector('input').value = '';
-        newCategoryDiv.querySelector('input').removeAttribute('required');
+    function updateCustoRemoveButtons() {
+        const rows = document.querySelectorAll('#custos-container .custo-row');
+        rows.forEach((row, index) => {
+            const removeBtn = row.querySelector('.remove-custo');
+            removeBtn.disabled = rows.length === 1;
+            removeBtn.onclick = () => { row.remove(); updateCustoRemoveButtons(); };
+        });
+    }
 
-        custosContainer.appendChild(newRow);
-        
-        // Adicionar event listener para a nova linha
-        const newSelect = newRow.querySelector('select[name="custoCategoria"]');
-        newSelect.addEventListener('change', () => handleCategoryChange(newSelect));
-        
-        addRemoveButtonLogic(custosContainer);
+    document.getElementById('add-custo-btn').addEventListener('click', () => {
+        const container = document.getElementById('custos-container');
+        const newRow = container.querySelector('.custo-row').cloneNode(true);
+        newRow.querySelectorAll('input').forEach(input => input.value = '');
+        newRow.querySelector('select').selectedIndex = 0;
+        newRow.querySelector('.new-category-input').style.display = 'none';
+        container.appendChild(newRow);
+        setupCustoRow(newRow);
+        updateCustoRemoveButtons();
     });
 
-    // Adicionar event listener inicial
-    custosContainer.querySelectorAll('select[name="custoCategoria"]').forEach(select => {
-        select.addEventListener('change', () => handleCategoryChange(select));
+    document.querySelectorAll('#custos-container .custo-row').forEach(setupCustoRow);
+    updateCustoRemoveButtons();
+
+    // --- LÓGICA PARA FATURAMENTO (MODIFICADA) ---
+    function setupFaturamentoRow(row) {
+        // A lógica que escondia o campo "Fonte" foi REMOVIDA.
+        // Agora, apenas a lógica para o campo "Outro" permanece.
+        const fonteSelect = row.querySelector('select[name="faturamentoFonte"]');
+        const outroInput = row.querySelector('input[name="faturamentoFonteOutro"]');
+
+        fonteSelect.addEventListener('change', () => {
+            outroInput.style.display = fonteSelect.value === 'Outro' ? 'block' : 'none';
+            outroInput.required = fonteSelect.value === 'Outro';
+        });
+        
+        // Acionar na inicialização para garantir o estado correto do campo "Outro"
+        outroInput.style.display = fonteSelect.value === 'Outro' ? 'block' : 'none';
+        outroInput.required = fonteSelect.value === 'Outro';
+    }
+
+    function updateFaturamentoRemoveButtons() {
+        const rows = document.querySelectorAll('#faturamento-container .faturamento-row');
+        rows.forEach(row => {
+            const removeBtn = row.querySelector('.remove-faturamento');
+            removeBtn.disabled = rows.length === 1;
+            removeBtn.onclick = () => { row.remove(); updateFaturamentoRemoveButtons(); };
+        });
+    }
+
+    document.getElementById('add-faturamento-btn').addEventListener('click', () => {
+        const container = document.getElementById('faturamento-container');
+        const newRow = container.querySelector('.faturamento-row').cloneNode(true);
+        newRow.querySelectorAll('input').forEach(input => input.value = '');
+        newRow.querySelectorAll('select').forEach(select => select.selectedIndex = 0);
+        container.appendChild(newRow);
+        setupFaturamentoRow(newRow);
+        updateFaturamentoRemoveButtons();
     });
 
-    addRemoveButtonLogic(custosContainer); // Initial check
+    document.querySelectorAll('#faturamento-container .faturamento-row').forEach(setupFaturamentoRow);
+    updateFaturamentoRemoveButtons();
 });
 </script>
 {% endblock %}
