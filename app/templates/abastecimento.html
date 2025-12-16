@@ -4,58 +4,44 @@
 
 {% block styles %}
 <style>
-    .form-column {
-        background-color: #f8f9fa;
-        padding: 2rem;
-        border-radius: 0.5rem;
-        height: fit-content;
-    }
-    .history-column {
-        height: 85vh;
-        overflow-y: auto;
-        padding: 1rem;
-    }
+    .form-column { background-color: #f8f9fa; padding: 2rem; border-radius: 0.5rem; height: fit-content; }
+    .history-column { height: 85vh; overflow-y: auto; padding: 1rem; }
+    .day-group { margin-bottom: 2rem; padding-bottom: 1.5rem; border-bottom: 2px solid #e9ecef; }
+    .day-group:last-child { border-bottom: none; }
+    .day-header { font-size: 1.1rem; font-weight: 600; color: #495057; text-transform: capitalize; margin-bottom: 1rem; }
+    .entry-item { margin-bottom: 1rem; }
+    .entry-item p { margin-bottom: 0.1rem; line-height: 1.4; }
 
-    /* --- ESTILO PARA SEPARAR OS DIAS --- */
-    .day-group {
-        margin-bottom: 2rem; 
-        padding-bottom: 1.5rem;
-        border-bottom: 2px solid #e9ecef; /* Linha separadora */
-    }
-    .day-group:last-child {
-        border-bottom: none; /* Remove a linha do último grupo */
-    }
-
-    .day-header {
-        font-size: 1.1rem;
-        font-weight: 600;
-        color: #495057;
-        text-transform: capitalize;
-        margin-bottom: 1rem;
-    }
-
-    .entry-item {
-        margin-bottom: 1rem; 
-    }
-    .entry-item p { 
-        margin-bottom: 0.1rem; 
-        line-height: 1.4;
-    }
-
-    .consumption-highlight {
+    /* Estilo para a média simples (trecho) */
+    .stretch-consumption-highlight {
         margin-top: 0.5rem;
         padding: 0.5rem;
-        background-color: #e6f9f0;
+        background-color: #f8f9fa; /* Fundo cinza claro */
+        border: 1px solid #dee2e6;
         border-radius: .3rem;
-        font-weight: 600;
+        font-size: 0.9rem;
     }
+
+    /* NOVO ESTILO: Destaque para a média real (período de tanque cheio) */
+    .period-consumption-highlight {
+        margin-top: 0.5rem;
+        padding: 0.8rem;
+        background-color: #e6f9f0; /* Fundo verde claro */
+        border: 1px solid #b8e0c5;
+        border-radius: .4rem;
+        font-weight: 700;
+        text-align: center;
+        font-size: 1rem;
+        color: #0f5132;
+    }
+    .period-consumption-highlight .bi { vertical-align: -0.1em; }
+
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="row gx-lg-5">
-    <!-- Coluna do Formulário (RESTAURADA) -->
-    <div class="col-lg-5">
+    <div class="col-lg-5"> <!-- Coluna do Formulário -->
         <div class="form-column">
             <h2 class="text-center mb-4">Lançar Abastecimento</h2>
             <form method="POST" id="abastecimentoForm" novalidate>
@@ -74,14 +60,12 @@
         </div>
     </div>
 
-    <!-- Coluna do Histórico (COM SEPARADORES DE DIA) -->
-    <div class="col-lg-7">
+    <div class="col-lg-7"> <!-- Coluna do Histórico -->
         <div class="history-column">
             {% if historico %}
                 {% for group in historico|groupby('data') %}
                     <div class="day-group">
                         <div class="day-header">{{ group.grouper.strftime('%A, %d de %B de %Y') }}</div>
-                        
                         {% for abs in group.list %}
                             <div class="entry-item">
                                 <p><strong>{{ abs.tipo_combustivel.nome }}</strong></p>
@@ -90,8 +74,16 @@
                                 <p><strong>Preço/L:</strong> R$ {{ "%.3f"|format(abs.preco_por_litro) }}</p>
                                 <p><strong>Total:</strong> R$ {{ "%.2f"|format(abs.custo_total) }}</p>
 
+                                <!-- CORREÇÃO: Exibe a média precisa do período de tanque cheio -->
+                                {% if abs.media_consumo_calculada %}
+                                <div class="period-consumption-highlight">
+                                    <i class="bi bi-fuel-pump-fill"></i> Média Real do Período: <strong>{{ "%.2f"|format(abs.media_consumo_calculada) }} km/L</strong>
+                                </div>
+                                {% endif %}
+
+                                <!-- Exibe a média simples do trecho -->
                                 {% if abs.media_desde_anterior %}
-                                <div class="consumption-highlight">
+                                <div class="stretch-consumption-highlight">
                                     Média do Trecho: {{ "%.2f"|format(abs.media_desde_anterior) }} km/L
                                 </div>
                                 {% endif %}
