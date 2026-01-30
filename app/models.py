@@ -1,7 +1,23 @@
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
+from flask_login import UserMixin
+from werkzeug.security import generate_password_hash, check_password_hash
 
 db = SQLAlchemy()
+
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    google_id = db.Column(db.String(255), unique=True, nullable=True)
+    email = db.Column(db.String(255), unique=True, nullable=False)
+    password_hash = db.Column(db.String(256), nullable=True)
+    name = db.Column(db.String(255), nullable=True)
+    profile_pic = db.Column(db.String(255), nullable=True)
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
 
 class Faturamento(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -48,17 +64,12 @@ class LancamentoDiario(db.Model):
     data = db.Column(db.Date, nullable=False, default=datetime.utcnow)
     km_rodado = db.Column(db.Integer, nullable=False)
     
-    # A coluna 'faturamento' foi REMOVIDA daqui.
-
     parametro_id = db.Column(db.Integer, db.ForeignKey('parametros.id'), nullable=False)
     parametro = db.relationship('Parametros', back_populates='lancamentos_diarios')
 
-    # RELACIONAMENTO ADICIONADO: Agora um lançamento pode ter vários faturamentos.
     faturamentos = db.relationship('Faturamento', back_populates='lancamento', cascade="all, delete-orphan")
-    
     custos_variaveis = db.relationship('CustoVariavel', back_populates='lancamento', cascade="all, delete-orphan")
 
-    # PROPRIEDADE ADICIONADA: Calcula o faturamento total do dia automaticamente.
     @property
     def faturamento_total(self):
         if not self.faturamentos:

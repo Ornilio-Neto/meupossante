@@ -1,16 +1,95 @@
-from flask import render_template, request, redirect, url_for, flash
+from flask import render_template, request, redirect, url_for, flash, current_app
 from datetime import datetime, timedelta
 import calendar
 import locale
 from . import bp as main
-# Substitua a linha de importação existente por esta:
-from ..models import db, Parametros, CustoFixo, CategoriaCusto, LancamentoDiario, CustoVariavel, Abastecimento, TipoCombustivel, Faturamento
-
+from .forms import LoginForm, RegistrationForm
+from ..models import db, Parametros, CustoFixo, CategoriaCusto, LancamentoDiario, CustoVariavel, Abastecimento, TipoCombustivel, Faturamento, User
+from flask_login import login_user, logout_user, login_required, current_user
 
 # Configura o locale para Português do Brasil
 locale.setlocale(locale.LC_TIME, 'pt_BR.UTF-8')
 
+# --- ROTAS DE AUTENTICAÇÃO ---
+
+@main.route("/login", methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('main.index'))
+    
+    form = LoginForm()
+    if form.validate_on_submit():
+        user = User.query.filter_by(email=form.email.data).first()
+        if user is None or not user.check_password(form.password.data):
+            flash('E-mail ou senha inválidos.', 'danger')
+            return redirect(url_for('main.login'))
+        
+        login_user(user, remember=form.remember_me.data)
+        next_page = request.args.get('next')
+        return redirect(next_page or url_for('main.index'))
+        
+    return render_template("login.html", form=form)
+
+@main.route("/register", methods=['GET', 'POST'])
+def register():
+    if current_user.is_authenticated:
+        return redirect(url_for('main.index'))
+    
+    form = RegistrationForm()
+    if form.validate_on_submit():
+        user = User(email=form.email.data)
+        user.set_password(form.password.data)
+        user.name = form.email.data.split('@')[0]
+        db.session.add(user)
+        db.session.commit()
+        flash('Conta criada com sucesso! Faça o login para continuar.', 'success')
+        return redirect(url_for('main.login'))
+
+    return render_template('register.html', form=form)
+
+@main.route("/login/google")
+def login_google():
+    redirect_uri = url_for('main.authorize', _external=True)
+    return current_app.oauth.google.authorize_redirect(redirect_uri)
+
+@main.route("/authorize")
+def authorize():
+    token = current_app.oauth.google.authorize_access_token()
+    user_info = current_app.oauth.google.get('https://www.googleapis.com/oauth2/v2/userinfo').json()
+    
+    google_id = str(user_info['id'])
+    email = user_info['email']
+
+    user = User.query.filter_by(email=email).first()
+
+    if user is None:
+        user = User(
+            google_id=google_id,
+            email=email,
+            name=user_info.get('name'),
+            profile_pic=user_info.get('picture')
+        )
+        db.session.add(user)
+    else:
+        user.google_id = google_id
+        user.name = user.name or user_info.get('name')
+        user.profile_pic = user.profile_pic or user_info.get('picture')
+    
+    db.session.commit()
+    login_user(user, remember=True)
+    return redirect(url_for('main.index'))
+
+@main.route("/logout")
+@login_required
+def logout():
+    logout_user()
+    flash("Você foi desconectado.", "info")
+    return redirect(url_for('main.login'))
+
+# --- ROTAS DA APLICAÇÃO ---
+
 @main.route("/", methods=['GET', 'POST'])
+@login_required
 def index():
     parametro = Parametros.query.first()
 
@@ -31,10 +110,8 @@ def index():
         if form_type == 'desempenho':
             lancamento_diario.km_rodado = int(request.form.get('kmRodado') or 0)
             
-            # Limpa faturamentos antigos antes de salvar os novos
             Faturamento.query.filter_by(lancamento_id=lancamento_diario.id).delete()
             
-            # Coleta os dados do formulário
             valores = request.form.getlist('faturamentoValor')
             tipos = request.form.getlist('faturamentoTipo')
             fontes = request.form.getlist('faturamentoFonte')
@@ -49,13 +126,16 @@ def index():
                 valor = float(valor_str)
                 tipo = tipos[i]
                 
-                # LÓGICA CORRIGIDA: Captura a fonte independentemente do tipo
-                fonte_selecionada = fontes[i]
-                if fonte_selecionada == 'Outro':
-                    fonte_customizada = fontes_outro[i].strip()
-                    fonte_final = fonte_customizada if fonte_customizada else 'Outro'
-                else:
-                    fonte_final = fonte_selecionada
+                fonte_final = 'N/A'
+                if tipo == 'App':
+                    fonte_selecionada = fontes[i]
+                    if fonte_selecionada == 'Outro':
+                        fonte_customizada = fontes_outro[i].strip()
+                        fonte_final = fonte_customizada if fonte_customizada else 'Outro'
+                    else:
+                        fonte_final = fonte_selecionada
+                else: # Se for 'Especie'
+                    fonte_final = 'Espécie'
 
                 novo_faturamento = Faturamento(
                     valor=valor,
@@ -69,7 +149,6 @@ def index():
             flash(f'Desempenho e {faturamentos_adicionados} fonte(s) de faturamento salvos com sucesso!', 'success')
 
         elif form_type == 'custo':
-            # A lógica de custo permanece inalterada
             custo_descricoes = request.form.getlist('custoDescricao')
             custo_categorias = request.form.getlist('custoCategoria')
             new_category_names = request.form.getlist('newCategoryName')
@@ -78,9 +157,12 @@ def index():
             custos_adicionados = 0
             for i in range(len(custo_valores)):
                 valor_custo_str = custo_valores[i].strip()
-                if not valor_custo_str or not custo_categorias[i]: continue
+                if not valor_custo_str or not custo_categorias[i]:
+                    continue
+                
                 descricao_custo = custo_descricoes[i].strip()
                 categoria_id_str = custo_categorias[i]
+                
                 categoria_id_final = None
                 if categoria_id_str == 'add_new_category':
                     nome_nova_categoria = new_category_names[i].strip()
@@ -119,8 +201,8 @@ def index():
     return render_template('index.html', parametro=parametro, categorias=categorias, hoje=hoje)
 
 
-
 @main.route("/abastecimento", methods=['GET', 'POST'])
+@login_required
 def abastecimento():
     parametro = Parametros.query.first()
     if not parametro:
@@ -176,7 +258,6 @@ def abastecimento():
         flash(f'Abastecimento de {litros:.2f}L salvo com sucesso!', 'success')
         return redirect(url_for('main.abastecimento'))
 
-    # LÓGICA GET CORRIGIDA PARA CALCULAR A MÉDIA
     tipos_combustivel = TipoCombustivel.query.order_by(TipoCombustivel.nome).all()
     hoje = (datetime.utcnow() - timedelta(hours=3)).strftime('%Y-%m-%d')
     historico_crescente = Abastecimento.query.filter_by(parametro_id=parametro.id).order_by(Abastecimento.data.asc(), Abastecimento.km_atual.asc()).all()
@@ -201,6 +282,7 @@ def abastecimento():
     )
 
 @main.route("/dashboard")
+@login_required
 def dashboard():
     parametro = Parametros.query.first()
     if not parametro:
@@ -232,7 +314,6 @@ def dashboard():
         LancamentoDiario.data <= hoje
     ).all()
 
-    # ALTERAÇÃO AQUI
     faturamento_realizado_mes = sum(l.faturamento_total for l in lancamentos_mes)
     km_rodados_mes = sum(l.km_rodado for l in lancamentos_mes)
     custos_variaveis_mes = sum(c.valor for l in lancamentos_mes for c in l.custos_variaveis)
@@ -269,7 +350,6 @@ def dashboard():
         performance_dia = 0
         if lancamento:
             custos_variaveis_dia = sum(c.valor for c in lancamento.custos_variaveis)
-            # ALTERAÇÃO AQUI
             performance_dia = lancamento.faturamento_total
             if parametro.tipo_meta == 'liquida':
                 performance_dia -= custos_variaveis_dia
@@ -298,8 +378,8 @@ def dashboard():
     )
 
 
-
 @main.route("/categorias", methods=['GET', 'POST'])
+@login_required
 def categorias():
     if request.method == 'POST':
         nome_categoria = request.form.get('nome_categoria')
@@ -318,6 +398,7 @@ def categorias():
     return render_template('categorias.html', categorias=todas_categorias)
 
 @main.route("/cadastro", methods=['GET', 'POST'])
+@login_required
 def cadastro():
     parametro_existente = Parametros.query.first()
     if request.method == 'POST':
@@ -350,7 +431,6 @@ def cadastro():
 
     return render_template('cadastro.html', parametro=parametro_existente)
 
-
 def recalcular_medias(parametro_id):
     abastecimentos = Abastecimento.query.filter_by(parametro_id=parametro_id).order_by(Abastecimento.data, Abastecimento.km_atual).all()
     parametro = Parametros.query.get(parametro_id)
@@ -358,7 +438,6 @@ def recalcular_medias(parametro_id):
     total_km_rodados = 0
     total_litros_consumidos = 0
 
-    # Limpa todas as médias calculadas existentes
     for abs in abastecimentos:
         abs.media_consumo_calculada = None
 
@@ -370,8 +449,6 @@ def recalcular_medias(parametro_id):
 
         km_rodados_periodo = fim.km_atual - inicio.km_atual
         
-        # Soma os litros de todos os abastecimentos (incluindo parciais) entre os dois tanques cheios.
-        # Não inclui o abastecimento inicial (inicio), mas inclui o final (fim).
         litros_consumidos_periodo = sum(a.litros for a in abastecimentos if inicio.data < a.data <= fim.data and inicio.km_atual < a.km_atual <= fim.km_atual)
 
         if litros_consumidos_periodo > 0:
@@ -384,7 +461,6 @@ def recalcular_medias(parametro_id):
     if total_litros_consumidos > 0:
         parametro.media_consumo = total_km_rodados / total_litros_consumidos
     else:
-        # Se não há ciclos de tanque cheio, calcula uma média simples se houver dados
         if len(abastecimentos) > 1:
             primeiro = abastecimentos[0]
             ultimo = abastecimentos[-1]
@@ -393,7 +469,6 @@ def recalcular_medias(parametro_id):
             if litros_total > 0:
                 parametro.media_consumo = km_total / litros_total
 
-    # Atualiza o KM mais recente no painel
     if abastecimentos:
         parametro.km_atual = max(a.km_atual for a in abastecimentos)
     

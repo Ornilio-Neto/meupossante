@@ -1,0 +1,58 @@
+{% extends "base.html" %} {% block title %}Criar Conta - Meu Possante{% endblock
+%} {% block styles %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('static', filename='css/login.css') }}"
+/>
+{% endblock %} {# Substituindo o main_content para um layout de página inteira
+#} {% block main_content %}
+<div class="login-page">
+  <div class="login-container">
+    <h1 class="text-center h3 mb-4">Crie sua Conta</h1>
+
+    <form method="POST" action="{{ url_for('main.register') }}" novalidate>
+      {{ form.hidden_tag() }}
+
+      <div class="form-floating mb-3">
+        {{ form.email(class="form-control", placeholder="E-mail") }} {{
+        form.email.label(class="form-label") }}
+      </div>
+      {% for error in form.email.errors %}
+      <div class="invalid-feedback d-block text-start ps-1 mb-2">
+        {{ error }}
+      </div>
+      {% endfor %}
+
+      <div class="form-floating mb-3">
+        {{ form.password(class="form-control", placeholder="Senha") }} {{
+        form.password.label(class="form-label") }}
+      </div>
+      {% for error in form.password.errors %}
+      <div class="invalid-feedback d-block text-start ps-1 mb-2">
+        {{ error }}
+      </div>
+      {% endfor %}
+
+      <div class="form-floating mb-4">
+        {{ form.password2(class="form-control", placeholder="Confirme a Senha")
+        }} {{ form.password2.label(class="form-label") }}
+      </div>
+      {% for error in form.password2.errors %}
+      <div class="invalid-feedback d-block text-start ps-1 mb-2">
+        {{ error }}
+      </div>
+      {% endfor %}
+
+      <div class="d-grid mb-3">
+        {{ form.submit(class="btn btn-primary mt-3") }}
+      </div>
+    </form>
+
+    <div class="text-center mt-4">
+      <a href="{{ url_for('main.login') }}" class="forgot-password-link"
+        >Já tem uma conta? Faça o login</a
+      >
+    </div>
+  </div>
+</div>
+{% endblock main_content %}
