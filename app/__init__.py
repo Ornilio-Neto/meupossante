@@ -6,7 +6,7 @@ from authlib.integrations.flask_client import OAuth
 from dotenv import load_dotenv
 from flask_login import LoginManager
 
-# Carrega as variáveis de ambiente do arquivo .env
+# Carrega as variáveis de ambiente do arquivo .env (para desenvolvimento local)
 load_dotenv()
 
 def create_app():
@@ -15,9 +15,10 @@ def create_app():
               template_folder='templates', 
               static_folder='static')
 
+    # Configuração da aplicação
     app.config.from_mapping(
-        SECRET_KEY='dev',
-        SQLALCHEMY_DATABASE_URI=f"sqlite:///{os.path.join(app.instance_path, 'database.db')}",
+        SECRET_KEY=os.getenv('SECRET_KEY', 'dev'), # Use uma chave secreta de produção!
+        SQLALCHEMY_DATABASE_URI=os.getenv('DATABASE_URL') or f"sqlite:///{os.path.join(app.instance_path, 'database.db')}",
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
         GOOGLE_CLIENT_ID=os.getenv("GOOGLE_CLIENT_ID"),
         GOOGLE_CLIENT_SECRET=os.getenv("GOOGLE_CLIENT_SECRET"),
@@ -46,9 +47,11 @@ def create_app():
     oauth = OAuth(app)
     app.oauth = oauth
     
-    # Define a URL de redirecionamento explícita e fixa que o Google espera.
-    # Esta DEVE corresponder exatamente à URI no Google Cloud Console.
-    google_redirect_uri = f"http://localhost:{os.environ.get('PORT', 8080)}/authorize"
+    # Define a URL de redirecionamento dinamicamente.
+    # Para produção (PythonAnywhere), defina a variável de ambiente APP_DOMAIN.
+    # Para desenvolvimento, o padrão é localhost.
+    domain = os.getenv('APP_DOMAIN', f"http://localhost:{os.environ.get('PORT', 8080)}")
+    google_redirect_uri = f"{domain}/authorize"
 
     oauth.register(
         name='google',
