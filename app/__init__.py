@@ -15,16 +15,21 @@ def create_app():
               template_folder='templates', 
               static_folder='static')
 
+    # O caminho padrão para o DB, usado em desenvolvimento local
+    default_database_path = f"sqlite:///{os.path.join(app.instance_path, 'database.db')}"
+
     # Configuração da aplicação
     app.config.from_mapping(
-        SECRET_KEY=os.getenv('SECRET_KEY', 'dev'), # Use uma chave secreta de produção!
-        SQLALCHEMY_DATABASE_URI=os.getenv('DATABASE_URL') or f"sqlite:///{os.path.join(app.instance_path, 'database.db')}",
+        SECRET_KEY=os.getenv('SECRET_KEY', 'dev'), # Deve ser sobreposto em produção!
+        # Usa DATABASE_URL se existir (em produção), senão usa o caminho padrão
+        SQLALCHEMY_DATABASE_URI=os.getenv('DATABASE_URL') or default_database_path,
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
         GOOGLE_CLIENT_ID=os.getenv("GOOGLE_CLIENT_ID"),
         GOOGLE_CLIENT_SECRET=os.getenv("GOOGLE_CLIENT_SECRET"),
     )
 
     try:
+        # Cria a pasta 'instance' se ela não existir (útil para o primeiro run local)
         os.makedirs(app.instance_path)
     except OSError:
         pass
@@ -47,9 +52,7 @@ def create_app():
     oauth = OAuth(app)
     app.oauth = oauth
     
-    # Define a URL de redirecionamento dinamicamente.
-    # Para produção (PythonAnywhere), defina a variável de ambiente APP_DOMAIN.
-    # Para desenvolvimento, o padrão é localhost.
+    # Define a URL de redirecionamento dinamicamente
     domain = os.getenv('APP_DOMAIN', f"http://localhost:{os.environ.get('PORT', 8080)}")
     google_redirect_uri = f"{domain}/authorize"
 
@@ -58,9 +61,7 @@ def create_app():
         client_id=app.config["GOOGLE_CLIENT_ID"],
         client_secret=app.config["GOOGLE_CLIENT_SECRET"],
         server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
-        client_kwargs={
-            'scope': 'openid email profile'
-        },
+        client_kwargs={'scope': 'openid email profile'},
         redirect_uri=google_redirect_uri
     )
 
