@@ -255,6 +255,7 @@ endblock %} {% block styles %}
       if (this.value === "add_new_combustivel") {
         newCombustivelWrapper.classList.remove("d-none");
         newCombustivelInput.required = true;
+        newCombustivelInput.value = ""; // Clear the input when shown
       } else {
         newCombustivelWrapper.classList.add("d-none");
         newCombustivelInput.required = false;
