@@ -124,13 +124,14 @@ endblock %} {% block styles %}
           </div>
         </div>
         <div class="mb-3">
-          <label for="tipoCombustivel">Combustível</label
+          <label for="tipoCombustivel" class="form-label">Combustível</label
           ><select
             class="form-select"
             id="tipoCombustivel"
             name="tipoCombustivel"
             required
           >
+            <option value="" selected disabled hidden>Selecione...</option>
             {% for tipo in tipos_combustivel %}
             <option value="{{ tipo.id }}">{{ tipo.nome }}</option>
             {% endfor %}
@@ -245,7 +246,6 @@ endblock %} {% block styles %}
       if (tipoCombustivelSelect.value === "add_new_combustivel") {
         newCombustivelWrapper.classList.remove("d-none");
         newCombustivelInput.required = true;
-        newCombustivelInput.value = "";
       } else {
         newCombustivelWrapper.classList.add("d-none");
         newCombustivelInput.required = false;
