@@ -35,21 +35,19 @@ endblock %} {% block styles %}
     line-height: 1.4;
   }
 
-  /* Estilo para a média simples (trecho) */
   .stretch-consumption-highlight {
     margin-top: 0.5rem;
     padding: 0.5rem;
-    background-color: #f8f9fa; /* Fundo cinza claro */
+    background-color: #f8f9fa;
     border: 1px solid #dee2e6;
     border-radius: 0.3rem;
     font-size: 0.9rem;
   }
 
-  /* NOVO ESTILO: Destaque para a média real (período de tanque cheio) */
   .period-consumption-highlight {
     margin-top: 0.5rem;
     padding: 0.8rem;
-    background-color: #e6f9f0; /* Fundo verde claro */
+    background-color: #e6f9f0;
     border: 1px solid #b8e0c5;
     border-radius: 0.4rem;
     font-weight: 700;
@@ -184,7 +182,6 @@ endblock %} {% block styles %}
           </p>
           <p><strong>Total:</strong> R$ {{ "%.2f"|format(abs.custo_total) }}</p>
 
-          <!-- CORREÇÃO: Exibe a média precisa do período de tanque cheio -->
           {% if abs.media_consumo_calculada %}
           <div class="period-consumption-highlight">
             <i class="bi bi-fuel-pump-fill"></i> Média Real do Período:
@@ -192,10 +189,7 @@ endblock %} {% block styles %}
               >{{ "%.2f"|format(abs.media_consumo_calculada) }} km/L</strong
             >
           </div>
-          {% endif %}
-
-          <!-- Exibe a média simples do trecho -->
-          {% if abs.media_desde_anterior %}
+          {% endif %} {% if abs.media_desde_anterior %}
           <div class="stretch-consumption-highlight">
             Média do Trecho: {{ "%.2f"|format(abs.media_desde_anterior) }} km/L
           </div>
@@ -219,28 +213,24 @@ endblock %} {% block styles %}
     const precoInput = document.getElementById("precoPorLitro");
     const litrosInput = document.getElementById("litros");
     const totalInput = document.getElementById("custoTotal");
-    let lastEdited = null;
 
     function calculate() {
       const preco = parseFloat(precoInput.value) || 0;
       const litros = parseFloat(litrosInput.value) || 0;
       const total = parseFloat(totalInput.value) || 0;
 
-      if (lastEdited === precoInput && litros > 0) {
+      if (document.activeElement === precoInput && litros > 0) {
         totalInput.value = (preco * litros).toFixed(2);
-      } else if (lastEdited === litrosInput && preco > 0) {
+      } else if (document.activeElement === litrosInput && preco > 0) {
         totalInput.value = (preco * litros).toFixed(2);
-      } else if (lastEdited === totalInput && preco > 0) {
+      } else if (document.activeElement === totalInput && preco > 0) {
         litrosInput.value = (total / preco).toFixed(2);
-      } else if (lastEdited === totalInput && litros > 0) {
+      } else if (document.activeElement === totalInput && litros > 0) {
         precoInput.value = (total / litros).toFixed(3);
       }
     }
 
     [precoInput, litrosInput, totalInput].forEach((input) => {
-      input.addEventListener("focus", function () {
-        lastEdited = this;
-      });
       input.addEventListener("input", calculate);
     });
 
@@ -251,22 +241,22 @@ endblock %} {% block styles %}
     );
     const newCombustivelInput = document.getElementById("newCombustivelName");
 
-    tipoCombustivelSelect.addEventListener("change", function () {
-      if (this.value === "add_new_combustivel") {
+    function toggleNewFuelField() {
+      if (tipoCombustivelSelect.value === "add_new_combustivel") {
         newCombustivelWrapper.classList.remove("d-none");
         newCombustivelInput.required = true;
-        newCombustivelInput.value = ""; // Clear the input when shown
+        newCombustivelInput.value = "";
       } else {
         newCombustivelWrapper.classList.add("d-none");
         newCombustivelInput.required = false;
-        newCombustivelInput.value = ""; // Clear the input when hidden
+        newCombustivelInput.value = "";
       }
-    });
-
-    // Trigger change event on page load in case the option is already selected
-    if (tipoCombustivelSelect.value === "add_new_combustivel") {
-      tipoCombustivelSelect.dispatchEvent(new Event("change"));
     }
+
+    tipoCombustivelSelect.addEventListener("change", toggleNewFuelField);
+
+    // Initial check on page load
+    toggleNewFuelField();
   });
 </script>
 {% endblock %}

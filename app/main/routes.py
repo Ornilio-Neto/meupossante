@@ -210,8 +210,13 @@ def abastecimento():
         return redirect(url_for('main.cadastro'))
 
     if request.method == 'POST':
+        km_atual_str = request.form.get('kmAtual')
+        if not km_atual_str:
+            flash('O campo KM Atual é obrigatório.', 'danger')
+            return redirect(url_for('main.abastecimento'))
+        
+        km_atual = int(km_atual_str)
         data_obj = datetime.strptime(request.form.get('data'), '%Y-%m-%d').date()
-        km_atual = int(request.form.get('kmAtual'))
         preco_por_litro = float(request.form.get('precoPorLitro') or 0)
         litros = float(request.form.get('litros') or 0)
         custo_total = float(request.form.get('custoTotal') or 0)
@@ -219,17 +224,10 @@ def abastecimento():
         tipo_combustivel_id_str = request.form.get('tipoCombustivel')
         novo_nome_combustivel = request.form.get('newCombustivelName', '').strip()
 
-        if preco_por_litro > 0 and litros > 0:
-            custo_total = round(preco_por_litro * litros, 2)
-        elif custo_total > 0 and preco_por_litro > 0:
-            litros = round(custo_total / preco_por_litro, 2)
-        elif custo_total > 0 and litros > 0:
-            preco_por_litro = round(custo_total / litros, 3)
-        else:
+        if not all([preco_por_litro, litros, custo_total]):
             flash('Preencha pelo menos dois dos três campos de custo (Preço/Litro, Litros, Custo Total).', 'danger')
             return redirect(url_for('main.abastecimento'))
-        
-        tipo_combustivel_id_final = None
+
         if tipo_combustivel_id_str == 'add_new_combustivel':
             if not novo_nome_combustivel:
                 flash('Digite o nome do novo tipo de combustível.', 'danger')
