@@ -1,39 +1,41 @@
-{% extends "base.html" %}
-
-{% block title %}Gerenciar Categorias de Custo{% endblock %}
-
-{% block content %}
+{% extends "base.html" %} {% block title %}Gerenciar Categorias de Custo{%
+endblock %} {% block content %}
 <div class="container mt-4">
-    <h1 class="mb-4">Gerenciar Categorias de Custo</h1>
+  <h1 class="mb-4">Gerenciar Categorias de Custo</h1>
 
-    <!-- Formulário para adicionar nova categoria -->
-    <div class="card mb-4">
-        <div class="card-header">Adicionar Nova Categoria</div>
-        <div class="card-body">
-            <form method="POST" action="{{ url_for('categorias') }}">
-                <div class="input-group">
-                    <input type="text" class="form-control" name="nome_categoria" placeholder="Ex: Combustível, Alimentação, Manutenção" required>
-                    <button type="submit" class="btn btn-primary">Adicionar</button>
-                </div>
-            </form>
+  <!-- Formulário para adicionar nova categoria -->
+  <div class="card mb-4">
+    <div class="card-header">Adicionar Nova Categoria</div>
+    <div class="card-body">
+      <form method="POST" action="{{ url_for('main.categorias') }}">
+        <div class="input-group">
+          <input
+            type="text"
+            class="form-control"
+            name="nome_categoria"
+            placeholder="Ex: Combustível, Alimentação, Manutenção"
+            required
+          />
+          <button type="submit" class="btn btn-primary">Adicionar</button>
         </div>
+      </form>
     </div>
+  </div>
 
-    <!-- Lista de categorias existentes -->
-    <div class="card">
-        <div class="card-header">Categorias Existentes</div>
-        <div class="card-body">
-            {% if categorias %}
-                <ul class="list-group">
-                    {% for categoria in categorias %}
-                        <li class="list-group-item">{{ categoria.nome }}</li>
-                    {% endfor %}
-                </ul>
-            {% else %}
-                <p class="text-muted">Nenhuma categoria cadastrada ainda.</p>
-            {% endif %}
-        </div>
+  <!-- Lista de categorias existentes -->
+  <div class="card">
+    <div class="card-header">Categorias Existentes</div>
+    <div class="card-body">
+      {% if categorias %}
+      <ul class="list-group">
+        {% for categoria in categorias %}
+        <li class="list-group-item">{{ categoria.nome }}</li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="text-muted">Nenhuma categoria cadastrada ainda.</p>
+      {% endif %}
     </div>
-
+  </div>
 </div>
 {% endblock %}
