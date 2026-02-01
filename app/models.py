@@ -37,6 +37,8 @@ class Parametros(db.Model):
     km_atual = db.Column(db.Integer, nullable=False)
     media_consumo = db.Column(db.Float, nullable=False)
     meta_faturamento = db.Column(db.Float, nullable=False)
+    valor_km_minimo = db.Column(db.Float, nullable=False, default=0.0)
+    valor_km_meta = db.Column(db.Float, nullable=False, default=0.0)
     periodicidade_meta = db.Column(db.String(20), nullable=False, default='mensal')
     tipo_meta = db.Column(db.String(20), nullable=False, default='bruta')
     dias_trabalho_semana = db.Column(db.Integer, nullable=False, default=5)
@@ -76,6 +78,12 @@ class LancamentoDiario(db.Model):
         if not self.faturamentos:
             return 0
         return sum(f.valor for f in self.faturamentos)
+        
+    @property
+    def custos_variaveis_total(self):
+        if not self.custos_variaveis:
+            return 0
+        return sum(c.valor for c in self.custos_variaveis)
 
 
 class CustoVariavel(db.Model):

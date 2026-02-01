@@ -61,6 +61,14 @@
                     {% endfor %}
                 </select>
             </div>
+            <div class="col-md-4">
+                <label for="valorKmMinimo" class="form-label">Valor/KM Mínimo (R$)</label>
+                <input type="number" step="0.01" class="form-control" id="valorKmMinimo" name="valorKmMinimo" value="{{ parametro.valor_km_minimo if parametro else '' }}" required>
+            </div>
+            <div class="col-md-4">
+                <label for="valorKmMeta" class="form-label">Valor/KM Meta (R$)</label>
+                <input type="number" step="0.01" class="form-control" id="valorKmMeta" name="valorKmMeta" value="{{ parametro.valor_km_meta if parametro else '' }}" required>
+            </div>
         </div>
 
         <hr class="my-4">

@@ -106,11 +106,14 @@ def index():
         if not lancamento_diario:
             lancamento_diario = LancamentoDiario(data=data, km_rodado=0, parametro_id=parametro.id)
             db.session.add(lancamento_diario)
+            db.session.flush() # Garante que o lancamento_diario tenha um ID para o relacionamento
 
         if form_type == 'desempenho':
-            lancamento_diario.km_rodado = int(request.form.get('kmRodado') or 0)
+            # Acumula os KMs rodados em vez de substituir
+            km_adicional = int(request.form.get('kmRodado') or 0)
+            lancamento_diario.km_rodado += km_adicional
             
-            Faturamento.query.filter_by(lancamento_id=lancamento_diario.id).delete()
+            # REMOVIDO: Faturamento.query.filter_by(lancamento_id=lancamento_diario.id).delete()
             
             valores = request.form.getlist('faturamentoValor')
             tipos = request.form.getlist('faturamentoTipo')
@@ -141,7 +144,7 @@ def index():
                     valor=valor,
                     tipo=tipo,
                     fonte=fonte_final,
-                    lancamento=lancamento_diario
+                    lancamento_id=lancamento_diario.id # Associa diretamente ao ID
                 )
                 db.session.add(novo_faturamento)
                 faturamentos_adicionados += 1
@@ -183,7 +186,7 @@ def index():
                         descricao=descricao_custo if descricao_custo else 'Custo sem descrição',
                         valor=float(valor_custo_str),
                         categoria_id=categoria_id_final,
-                        lancamento=lancamento_diario
+                        lancamento_id=lancamento_diario.id # Associa diretamente ao ID
                     )
                     db.session.add(novo_custo_variavel)
                     custos_adicionados += 1
@@ -290,7 +293,10 @@ def dashboard():
     total_custos_fixos = sum(c.valor for c in parametro.custos_fixos)
     hoje = datetime.utcnow().date()
     dias_no_mes = calendar.monthrange(hoje.year, hoje.month)[1]
-    dias_uteis_no_mes_estimado = (dias_no_mes * (parametro.dias_trabalho_semana / 7))
+    
+    dias_uteis_no_mes_estimado = 0
+    if parametro.dias_trabalho_semana > 0:
+        dias_uteis_no_mes_estimado = (dias_no_mes * (parametro.dias_trabalho_semana / 7))
 
     meta_mensal_bruta = 0
     if parametro.periodicidade_meta == 'mensal':
@@ -307,13 +313,11 @@ def dashboard():
         meta_mensal_objetivo += total_custos_fixos 
 
     # --- AJUSTE PARA DATA DE CADASTRO ---
-    # Define a data de início dos cálculos como a data de cadastro ou o início do mês, o que for mais recente.
     primeiro_dia_mes = hoje.replace(day=1)
     user_creation_date = current_user.created_at.date()
     start_date = max(primeiro_dia_mes, user_creation_date)
 
     # --- Lançamentos e Desempenho Realizado ---
-    # Busca lançamentos apenas a partir da data de início ajustada.
     lancamentos_mes = LancamentoDiario.query.filter(
         LancamentoDiario.parametro_id == parametro.id,
         LancamentoDiario.data >= start_date,
@@ -322,7 +326,7 @@ def dashboard():
 
     faturamento_realizado_mes = sum(l.faturamento_total for l in lancamentos_mes)
     km_rodados_mes = sum(l.km_rodado for l in lancamentos_mes)
-    custos_variaveis_mes = sum(c.valor for l in lancamentos_mes for c in l.custos_variaveis)
+    custos_variaveis_mes = sum(l.custos_variaveis_total for l in lancamentos_mes)
     
     desempenho_realizado_mes = faturamento_realizado_mes
     if parametro.tipo_meta == 'liquida':
@@ -331,25 +335,47 @@ def dashboard():
     # --- Cálculo de Saldo e Metas Ajustadas ---
     meta_diaria_base = (meta_mensal_objetivo / dias_uteis_no_mes_estimado) if dias_uteis_no_mes_estimado > 0 else 0
     
-    # Calcula os dias de trabalho esperados desde a data de início ajustada até ontem.
-    # Se start_date for hoje, dias_passados será 0.
     dias_passados_desde_inicio = (hoje - start_date).days
     dias_trabalhados_estimados_no_periodo = dias_passados_desde_inicio * (parametro.dias_trabalho_semana / 7)
-    
-    # O desempenho esperado é a meta diária x dias de trabalho proporcionais desde o início.
     desempenho_esperado_periodo = meta_diaria_base * dias_trabalhados_estimados_no_periodo
-
     saldo_mes = desempenho_realizado_mes - desempenho_esperado_periodo
     
-    meta_restante = meta_mensal_objetivo - desempenho_realizado_mes
-    dias_uteis_restantes = (dias_no_mes - hoje.day + 1) * (parametro.dias_trabalho_semana / 7)
-    meta_diaria_ajustada = (meta_restante / dias_uteis_restantes) if dias_uteis_restantes > 0 else meta_restante
+    # --- NOVO CÁLCULO PARA "META DE PERFORMANCE PARA HOJE" ---
+    
+    # 1. Isola a performance de hoje
+    lancamento_hoje = next((l for l in lancamentos_mes if l.data == hoje), None)
+    performance_hoje = 0
+    if lancamento_hoje:
+        performance_hoje = lancamento_hoje.faturamento_total
+        if parametro.tipo_meta == 'liquida':
+            performance_hoje -= lancamento_hoje.custos_variaveis_total
+            
+    # 2. Calcula o desempenho realizado ATÉ ONTEM.
+    desempenho_realizado_ate_ontem = desempenho_realizado_mes - performance_hoje
+    
+    # 3. Calcula a meta restante do mês, baseada no desempenho até ontem.
+    meta_restante_mes = meta_mensal_objetivo - desempenho_realizado_ate_ontem
+    
+    # 4. Calcula os dias úteis restantes, incluindo hoje.
+    dias_uteis_restantes = 0
+    if parametro.dias_trabalho_semana > 0:
+        dias_uteis_restantes = (dias_no_mes - hoje.day + 1) * (parametro.dias_trabalho_semana / 7)
+        
+    # 5. A meta para hoje é a média necessária nos dias restantes.
+    meta_para_hoje = (meta_restante_mes / dias_uteis_restantes) if dias_uteis_restantes > 0 else meta_restante_mes
+    
+    # 6. O valor final é a meta para hoje MENOS o que já foi feito hoje.
+    meta_diaria_ajustada = meta_para_hoje - performance_hoje
+    
+    # Garante que a meta exibida não seja negativa.
+    if meta_diaria_ajustada < 0:
+        meta_diaria_ajustada = 0
+
 
     # --- Previsões para o Mês ---
     previsao_faturamento_bruto_mes = 0
     previsao_lucro_operacional_mes = 0
     
-    # A base para a previsão (média diária) deve usar os dias com lançamento desde a data de início
     dias_com_lancamento_total = db.session.query(db.func.count(db.distinct(LancamentoDiario.data))).filter(
         LancamentoDiario.parametro_id == parametro.id, 
         LancamentoDiario.data >= start_date, 
@@ -358,7 +384,6 @@ def dashboard():
 
     if dias_com_lancamento_total > 0:
         faturamento_medio_diario = faturamento_realizado_mes / dias_com_lancamento_total
-        # A previsão ainda é para o mês inteiro, então usa 'dias_uteis_no_mes_estimado'
         previsao_faturamento_bruto_mes = faturamento_medio_diario * dias_uteis_no_mes_estimado
         
         custo_variavel_por_km = (custos_variaveis_mes / km_rodados_mes) if km_rodados_mes > 0 else 0
@@ -372,24 +397,25 @@ def dashboard():
     lancamentos_por_data = {l.data: l for l in lancamentos_mes}
     dia_corrente = hoje
     
-    # O extrato diário começa de hoje e vai até a data de início ajustada.
     while dia_corrente >= start_date:
         lancamento = lancamentos_por_data.get(dia_corrente)
         performance_dia = 0
+        valor_km_dia = 0
         if lancamento:
-            custos_variaveis_dia = sum(c.valor for c in lancamento.custos_variaveis)
             performance_dia = lancamento.faturamento_total
             if parametro.tipo_meta == 'liquida':
-                performance_dia -= custos_variaveis_dia
+                performance_dia -= lancamento.custos_variaveis_total
+            if lancamento.km_rodado > 0:
+                valor_km_dia = lancamento.faturamento_total / lancamento.km_rodado
         
-        # O saldo do dia compara a performance com a meta diária base.
         saldo_do_dia = performance_dia - meta_diaria_base
 
         extrato_diario.append({
             'data': dia_corrente,
             'performance': performance_dia,
             'meta_esperada': meta_diaria_base,
-            'saldo': saldo_do_dia
+            'saldo': saldo_do_dia,
+            'valor_km': valor_km_dia
         })
         dia_corrente -= timedelta(days=1)
 
@@ -427,6 +453,7 @@ def categorias():
     todas_categorias = CategoriaCusto.query.order_by(CategoriaCusto.nome).all()
     return render_template('categorias.html', categorias=todas_categorias)
 
+
 @main.route("/cadastro", methods=['GET', 'POST'])
 @login_required
 def cadastro():
@@ -439,6 +466,8 @@ def cadastro():
         parametro_alvo.km_atual = int(request.form.get('kmAtual'))
         parametro_alvo.media_consumo = float(request.form.get('mediaConsumo'))
         parametro_alvo.meta_faturamento = float(request.form.get('metaFaturamento'))
+        parametro_alvo.valor_km_minimo = float(request.form.get('valorKmMinimo'))
+        parametro_alvo.valor_km_meta = float(request.form.get('valorKmMeta'))
         parametro_alvo.periodicidade_meta = request.form.get('periodicidadeMeta')
         parametro_alvo.tipo_meta = request.form.get('tipoMeta')
         parametro_alvo.dias_trabalho_semana = int(request.form.get('diasTrabalhoSemana'))
@@ -460,6 +489,7 @@ def cadastro():
         return redirect(url_for('main.dashboard'))
 
     return render_template('cadastro.html', parametro=parametro_existente)
+
 
 def recalcular_medias(parametro_id):
     abastecimentos = Abastecimento.query.filter_by(parametro_id=parametro_id).order_by(Abastecimento.data, Abastecimento.km_atual).all()

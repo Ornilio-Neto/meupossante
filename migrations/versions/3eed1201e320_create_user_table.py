@@ -1,8 +1,8 @@
-"""Migração inicial com todas as tabelas
+"""create user table
 
-Revision ID: 653d346f107e
+Revision ID: 3eed1201e320
 Revises: 
-Create Date: 2026-01-29 23:07:20.263628
+Create Date: 2026-02-01 15:16:33.863954
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '653d346f107e'
+revision = '3eed1201e320'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -31,6 +31,8 @@ def upgrade():
     sa.Column('km_atual', sa.Integer(), nullable=False),
     sa.Column('media_consumo', sa.Float(), nullable=False),
     sa.Column('meta_faturamento', sa.Float(), nullable=False),
+    sa.Column('valor_km_minimo', sa.Float(), nullable=False),
+    sa.Column('valor_km_meta', sa.Float(), nullable=False),
     sa.Column('periodicidade_meta', sa.String(length=20), nullable=False),
     sa.Column('tipo_meta', sa.String(length=20), nullable=False),
     sa.Column('dias_trabalho_semana', sa.Integer(), nullable=False),
@@ -49,6 +51,7 @@ def upgrade():
     sa.Column('password_hash', sa.String(length=256), nullable=True),
     sa.Column('name', sa.String(length=255), nullable=True),
     sa.Column('profile_pic', sa.String(length=255), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('email'),
     sa.UniqueConstraint('google_id')
