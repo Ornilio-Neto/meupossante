@@ -533,3 +533,65 @@ def recalcular_medias(parametro_id):
         parametro.km_atual = max(a.km_atual for a in abastecimentos)
     
     db.session.commit()
+
+
+
+@main.route('/abastecimento/editar/<int:id>', methods=['GET', 'POST'])
+@login_required
+def editar_abastecimento(id):
+    abastecimento = Abastecimento.query.get_or_404(id)
+    parametro = Parametros.query.first()
+    if not parametro or abastecimento.parametro_id != parametro.id:
+        abort(403)
+
+    if request.method == 'POST':
+        try:
+            abastecimento.data = datetime.strptime(request.form['data'], '%Y-%m-%d').date()
+            abastecimento.km_atual = int(request.form['kmAtual'])
+            abastecimento.litros = float(request.form['litros'])
+            abastecimento.preco_por_litro = float(request.form['precoPorLitro'])
+            abastecimento.custo_total = float(request.form['custoTotal'])
+            abastecimento.tanque_cheio = 'tanqueCheio' in request.form
+            
+            tipo_combustivel_id = request.form.get('tipoCombustivel')
+            if tipo_combustivel_id and tipo_combustivel_id.isdigit():
+                 abastecimento.tipo_combustivel_id = int(tipo_combustivel_id)
+
+            db.session.commit()
+            
+            recalcular_medias(parametro.id)
+            db.session.commit()
+
+            flash('Abastecimento atualizado com sucesso!', 'success')
+            return redirect(url_for('main.abastecimento'))
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f'Erro ao atualizar o abastecimento: {e}')
+            flash(f'Erro ao atualizar o abastecimento.', 'danger')
+            
+    tipos_combustivel = TipoCombustivel.query.order_by(TipoCombustivel.nome).all()
+    return render_template('editar_abastecimento.html', abastecimento=abastecimento, tipos_combustivel=tipos_combustivel, parametro=parametro)
+
+
+@main.route('/abastecimento/excluir/<int:id>', methods=['POST'])
+@login_required
+def excluir_abastecimento(id):
+    abastecimento = Abastecimento.query.get_or_404(id)
+    parametro = Parametros.query.first()
+    if not parametro or abastecimento.parametro_id != parametro.id:
+        abort(403)
+
+    try:
+        db.session.delete(abastecimento)
+        db.session.commit()
+        
+        recalcular_medias(parametro.id)
+        db.session.commit()
+            
+        flash('Abastecimento excluído com sucesso!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f'Erro ao excluir o abastecimento: {e}')
+        flash(f'Erro ao excluir o abastecimento.', 'danger')
+        
+    return redirect(url_for('main.abastecimento'))

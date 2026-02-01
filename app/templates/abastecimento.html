@@ -62,7 +62,7 @@ endblock %} {% block styles %}
 {% endblock %} {% block content %}
 <div class="row gx-lg-5">
   <div class="col-lg-5">
-    <!-- Coluna do Formulário  corre-->
+    <!-- Coluna do Formulário -->
     <div class="form-column">
       <h2 class="text-center mb-4">Lançar Abastecimento</h2>
       <form method="POST" id="abastecimentoForm" novalidate>
@@ -182,6 +182,28 @@ endblock %} {% block styles %}
             }}
           </p>
           <p><strong>Total:</strong> R$ {{ "%.2f"|format(abs.custo_total) }}</p>
+
+          <div class="mt-2">
+            <a
+              href="{{ url_for('main.editar_abastecimento', id=abs.id) }}"
+              class="btn btn-sm btn-outline-primary"
+              >Editar</a
+            >
+            <form
+              action="{{ url_for('main.excluir_abastecimento', id=abs.id) }}"
+              method="POST"
+              onsubmit="
+                return confirm(
+                  'Tem certeza que deseja excluir este lançamento?',
+                );
+              "
+              style="display: inline-block"
+            >
+              <button type="submit" class="btn btn-sm btn-outline-danger">
+                Excluir
+              </button>
+            </form>
+          </div>
 
           {% if abs.media_consumo_calculada %}
           <div class="period-consumption-highlight">
