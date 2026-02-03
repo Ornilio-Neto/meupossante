@@ -59,12 +59,13 @@ def register():
 @bp.route("/login/google")
 def login_google():
     redirect_uri = url_for('main.authorize', _external=True)
-    return current_app.oauth.google.authorize_redirect(redirect_uri)
+    return oauth.google.authorize_redirect(redirect_uri)
+
 
 @bp.route("/authorize")
 def authorize():
-    token = current_app.oauth.google.authorize_access_token()
-    user_info = current_app.oauth.google.get('https://www.googleapis.com/oauth2/v2/userinfo').json()
+    token = oauth.google.authorize_access_token()
+    user_info = oauth.google.get('https://www.googleapis.com/oauth2/v2/userinfo').json()
     
     google_id = str(user_info['id'])
     email = user_info['email']
