@@ -1,5 +1,5 @@
 from . import db
-from datetime import datetime
+from datetime import datetime, date
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
 
@@ -14,8 +14,7 @@ class User(UserMixin, db.Model):
     profile_pic = db.Column(db.String(200), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    # Relações centralizadas
-    parametros = db.relationship('Parametros', backref='user', uselist=False, cascade="all, delete-orphan")
+    parametros = db.relationship('Parametros', backref='user', lazy='dynamic', cascade="all, delete-orphan")
     custos = db.relationship('Custo', backref='user', lazy='dynamic', cascade="all, delete-orphan")
     registros_custo = db.relationship('RegistroCusto', backref='user', lazy='dynamic', cascade="all, delete-orphan")
     lancamentos_diarios = db.relationship('LancamentoDiario', backref='user', lazy='dynamic', cascade="all, delete-orphan")
@@ -33,7 +32,11 @@ class User(UserMixin, db.Model):
 class Parametros(db.Model):
     __tablename__ = 'parametros'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), unique=True, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    
+    start_date = db.Column(db.Date, nullable=False, default=date.today)
+    end_date = db.Column(db.Date, nullable=True)
+
     modelo_carro = db.Column(db.String(100))
     placa_carro = db.Column(db.String(20))
     km_atual = db.Column(db.Integer, default=0)
@@ -44,8 +47,6 @@ class Parametros(db.Model):
     dias_trabalho_semana = db.Column(db.Integer)
     valor_km_minimo = db.Column(db.Float, default=0.0)
     valor_km_meta = db.Column(db.Float, default=0.0)
-    # Relação com LancamentoDiario
-    lancamentos_diarios = db.relationship('LancamentoDiario', backref='parametro', lazy='dynamic', cascade="all, delete-orphan")
 
 class CategoriaCusto(db.Model):
     __tablename__ = 'categoria_custo'
@@ -57,7 +58,6 @@ class LancamentoDiario(db.Model):
     __tablename__ = 'lancamento_diario'
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    parametro_id = db.Column(db.Integer, db.ForeignKey('parametros.id'), nullable=False)
     data = db.Column(db.Date, nullable=False, index=True)
     km_rodado = db.Column(db.Integer, default=0)
     faturamentos = db.relationship('Faturamento', backref='lancamento', lazy='dynamic', cascade="all, delete-orphan")
@@ -101,7 +101,6 @@ class Abastecimento(db.Model):
     __tablename__ = 'abastecimento'
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    parametro_id = db.Column(db.Integer, db.ForeignKey('parametros.id'), nullable=False)
     data = db.Column(db.Date, nullable=False, index=True)
     km_atual = db.Column(db.Integer, nullable=False)
     litros = db.Column(db.Float, nullable=False)
@@ -120,7 +119,7 @@ class Custo(db.Model):
     dia_vencimento = db.Column(db.Integer, nullable=False)
     observacao = db.Column(db.Text, nullable=True)
     alerta_dias = db.Column(db.Integer, default=7)
-    is_active = db.Column(db.Boolean, default=True, nullable=False)  # <-- CAMPO ADICIONADO
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
     registros = db.relationship('RegistroCusto', backref='custo', lazy='dynamic', cascade="all, delete-orphan")
 
 class RegistroCusto(db.Model):

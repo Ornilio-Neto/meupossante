@@ -1,8 +1,8 @@
-"""adicao no campo de custos
+"""empty message
 
-Revision ID: a503c5c47a34
+Revision ID: b965b00b9598
 Revises: 
-Create Date: 2026-02-03 10:13:58.168695
+Create Date: 2026-02-03 12:33:35.441061
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = 'a503c5c47a34'
+revision = 'b965b00b9598'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -42,6 +42,24 @@ def upgrade():
     sa.UniqueConstraint('email'),
     sa.UniqueConstraint('google_id')
     )
+    op.create_table('abastecimento',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('user_id', sa.Integer(), nullable=False),
+    sa.Column('data', sa.Date(), nullable=False),
+    sa.Column('km_atual', sa.Integer(), nullable=False),
+    sa.Column('litros', sa.Float(), nullable=False),
+    sa.Column('valor_litro', sa.Float(), nullable=True),
+    sa.Column('valor_total', sa.Float(), nullable=False),
+    sa.Column('tanque_cheio', sa.Boolean(), nullable=True),
+    sa.Column('tipo_combustivel_id', sa.Integer(), nullable=True),
+    sa.Column('media_consumo_calculada', sa.Float(), nullable=True),
+    sa.ForeignKeyConstraint(['tipo_combustivel_id'], ['tipo_combustivel.id'], ),
+    sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('abastecimento', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_abastecimento_data'), ['data'], unique=False)
+
     op.create_table('custo',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
@@ -54,9 +72,22 @@ def upgrade():
     sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_table('lancamento_diario',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('user_id', sa.Integer(), nullable=False),
+    sa.Column('data', sa.Date(), nullable=False),
+    sa.Column('km_rodado', sa.Integer(), nullable=True),
+    sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('lancamento_diario', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_lancamento_diario_data'), ['data'], unique=False)
+
     op.create_table('parametros',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
+    sa.Column('start_date', sa.Date(), nullable=False),
+    sa.Column('end_date', sa.Date(), nullable=True),
     sa.Column('modelo_carro', sa.String(length=100), nullable=True),
     sa.Column('placa_carro', sa.String(length=20), nullable=True),
     sa.Column('km_atual', sa.Integer(), nullable=True),
@@ -68,61 +99,8 @@ def upgrade():
     sa.Column('valor_km_minimo', sa.Float(), nullable=True),
     sa.Column('valor_km_meta', sa.Float(), nullable=True),
     sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
-    sa.PrimaryKeyConstraint('id'),
-    sa.UniqueConstraint('user_id')
-    )
-    op.create_table('abastecimento',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('user_id', sa.Integer(), nullable=False),
-    sa.Column('parametro_id', sa.Integer(), nullable=False),
-    sa.Column('data', sa.Date(), nullable=False),
-    sa.Column('km_atual', sa.Integer(), nullable=False),
-    sa.Column('litros', sa.Float(), nullable=False),
-    sa.Column('valor_litro', sa.Float(), nullable=True),
-    sa.Column('valor_total', sa.Float(), nullable=False),
-    sa.Column('tanque_cheio', sa.Boolean(), nullable=True),
-    sa.Column('tipo_combustivel_id', sa.Integer(), nullable=True),
-    sa.Column('media_consumo_calculada', sa.Float(), nullable=True),
-    sa.ForeignKeyConstraint(['parametro_id'], ['parametros.id'], ),
-    sa.ForeignKeyConstraint(['tipo_combustivel_id'], ['tipo_combustivel.id'], ),
-    sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    with op.batch_alter_table('abastecimento', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_abastecimento_data'), ['data'], unique=False)
-
-    op.create_table('lancamento_diario',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('user_id', sa.Integer(), nullable=False),
-    sa.Column('parametro_id', sa.Integer(), nullable=False),
-    sa.Column('data', sa.Date(), nullable=False),
-    sa.Column('km_rodado', sa.Integer(), nullable=True),
-    sa.ForeignKeyConstraint(['parametro_id'], ['parametros.id'], ),
-    sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    with op.batch_alter_table('lancamento_diario', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_lancamento_diario_data'), ['data'], unique=False)
-
-    op.create_table('registro_custo',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('user_id', sa.Integer(), nullable=False),
-    sa.Column('custo_id', sa.Integer(), nullable=False),
-    sa.Column('data_vencimento', sa.Date(), nullable=False),
-    sa.Column('valor', sa.Float(), nullable=False),
-    sa.Column('pago', sa.Boolean(), nullable=False),
-    sa.Column('data_pagamento', sa.Date(), nullable=True),
-    sa.Column('metodo_pagamento', sa.String(length=50), nullable=True),
-    sa.Column('observacao', sa.Text(), nullable=True),
-    sa.ForeignKeyConstraint(['custo_id'], ['custo.id'], ),
-    sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
-    sa.PrimaryKeyConstraint('id'),
-    sa.UniqueConstraint('custo_id', 'data_vencimento', name='_custo_vencimento_uc')
-    )
-    with op.batch_alter_table('registro_custo', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_registro_custo_custo_id'), ['custo_id'], unique=False)
-        batch_op.create_index(batch_op.f('ix_registro_custo_data_vencimento'), ['data_vencimento'], unique=False)
-
     op.create_table('custo_variavel',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
@@ -154,11 +132,35 @@ def upgrade():
     with op.batch_alter_table('faturamento', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_faturamento_data'), ['data'], unique=False)
 
+    op.create_table('registro_custo',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('user_id', sa.Integer(), nullable=False),
+    sa.Column('custo_id', sa.Integer(), nullable=False),
+    sa.Column('data_vencimento', sa.Date(), nullable=False),
+    sa.Column('valor', sa.Float(), nullable=False),
+    sa.Column('pago', sa.Boolean(), nullable=False),
+    sa.Column('data_pagamento', sa.Date(), nullable=True),
+    sa.Column('metodo_pagamento', sa.String(length=50), nullable=True),
+    sa.Column('observacao', sa.Text(), nullable=True),
+    sa.ForeignKeyConstraint(['custo_id'], ['custo.id'], ),
+    sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('custo_id', 'data_vencimento', name='_custo_vencimento_uc')
+    )
+    with op.batch_alter_table('registro_custo', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_registro_custo_custo_id'), ['custo_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_registro_custo_data_vencimento'), ['data_vencimento'], unique=False)
+
     # ### end Alembic commands ###
 
 
 def downgrade():
     # ### commands auto generated by Alembic - please adjust! ###
+    with op.batch_alter_table('registro_custo', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_registro_custo_data_vencimento'))
+        batch_op.drop_index(batch_op.f('ix_registro_custo_custo_id'))
+
+    op.drop_table('registro_custo')
     with op.batch_alter_table('faturamento', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_faturamento_data'))
 
@@ -167,21 +169,16 @@ def downgrade():
         batch_op.drop_index(batch_op.f('ix_custo_variavel_data'))
 
     op.drop_table('custo_variavel')
-    with op.batch_alter_table('registro_custo', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_registro_custo_data_vencimento'))
-        batch_op.drop_index(batch_op.f('ix_registro_custo_custo_id'))
-
-    op.drop_table('registro_custo')
+    op.drop_table('parametros')
     with op.batch_alter_table('lancamento_diario', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_lancamento_diario_data'))
 
     op.drop_table('lancamento_diario')
+    op.drop_table('custo')
     with op.batch_alter_table('abastecimento', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_abastecimento_data'))
 
     op.drop_table('abastecimento')
-    op.drop_table('parametros')
-    op.drop_table('custo')
     op.drop_table('user')
     op.drop_table('tipo_combustivel')
     op.drop_table('categoria_custo')
