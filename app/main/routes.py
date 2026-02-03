@@ -408,10 +408,10 @@ def abastecimento():
     )
 
 
+@bp.route('/', methods=['GET', 'POST'])
 @bp.route('/dashboard', methods=['GET', 'POST'])
 @login_required
 def dashboard():
-    # --- CONFIGURAÇÃO INICIAL (Sua lógica original) ---
     today = date.today()
     yesterday = today - timedelta(days=1)
     year = request.args.get('year', today.year, type=int)
@@ -422,7 +422,6 @@ def dashboard():
         flash('Por favor, configure seus parâmetros na página de cadastro primeiro.', 'warning')
         return redirect(url_for('main.cadastro'))
 
-    # --- GERAÇÃO AUTOMÁTICA DOS CUSTOS DO MÊS ---
     definicoes_custos_ativos = Custo.query.filter_by(user_id=current_user.id, is_active=True).all()
     for definicao in definicoes_custos_ativos:
         try:
@@ -449,48 +448,31 @@ def dashboard():
             db.session.add(novo_registro)
     db.session.commit()
 
-    # --- BASE DE CÁLCULO DA META DIÁRIA (Sua lógica original) ---
-    meta_diaria_base = 0
-    dias_trabalho_semana = parametro.dias_trabalho_semana or 0
-    if dias_trabalho_semana > 0 and parametro.meta_faturamento > 0:
-        if parametro.periodicidade_meta == 'diaria':
-            meta_diaria_base = parametro.meta_faturamento
-        elif parametro.periodicidade_meta == 'semanal':
-            meta_diaria_base = parametro.meta_faturamento / dias_trabalho_semana
-        elif parametro.periodicidade_meta == 'mensal':
-            dias_trabalho_mes = dias_trabalho_semana * 4.33
-            meta_diaria_base = parametro.meta_faturamento / dias_trabalho_mes if dias_trabalho_mes > 0 else 0
-
-    # --- LÓGICA DA META DE PERFORMANCE PARA HOJE (Sua lógica original) ---
-    faturamento_ontem = db.session.query(func.sum(Faturamento.valor)).filter(
-        Faturamento.user_id == current_user.id, Faturamento.data == yesterday).scalar() or 0
-    diferenca_ontem = faturamento_ontem - meta_diaria_base
-    meta_ajustada_para_hoje = meta_diaria_base - diferenca_ontem
-    faturamento_hoje = db.session.query(func.sum(Faturamento.valor)).filter(
-        Faturamento.user_id == current_user.id, Faturamento.data == today).scalar() or 0
-    meta_restante_hoje = meta_ajustada_para_hoje - faturamento_hoje
-    meta_hoje_atingida = meta_restante_hoje <= 0
+    registros_custos_mes = current_user.registros_custo.filter(
+        extract('year', RegistroCusto.data_vencimento) == year, 
+        extract('month', RegistroCusto.data_vencimento) == month
+    ).join(Custo).order_by(RegistroCusto.data_vencimento).all()
     
-    # --- CÁLCULOS FINANCEIROS (Sua lógica original) ---
+    custos_fixos_total_mes = sum(rc.valor for rc in registros_custos_mes if rc.custo.is_active)
+
     faturamento_bruto_real_mes = db.session.query(func.sum(Faturamento.valor)).filter(Faturamento.user_id == current_user.id, extract('year', Faturamento.data) == year, extract('month', Faturamento.data) == month).scalar() or 0
     custos_variaveis_mes = db.session.query(func.sum(CustoVariavel.valor)).filter(CustoVariavel.user_id == current_user.id, extract('year', CustoVariavel.data) == year, extract('month', CustoVariavel.data) == month).scalar() or 0
     abastecimentos_mes = db.session.query(func.sum(Abastecimento.valor_total)).filter(Abastecimento.user_id == current_user.id, extract('year', Abastecimento.data) == year, extract('month', Abastecimento.data) == month).scalar() or 0
-    custos_fixos_pagos_mes = db.session.query(func.sum(RegistroCusto.valor)).filter(RegistroCusto.user_id == current_user.id, extract('year', RegistroCusto.data_vencimento) == year, extract('month', RegistroCusto.data_vencimento) == month, RegistroCusto.pago == True).scalar() or 0
+    custos_fixos_pagos_mes = sum(rc.valor for rc in registros_custos_mes if rc.pago)
     saldo_atual_real = faturamento_bruto_real_mes - custos_variaveis_mes - abastecimentos_mes - custos_fixos_pagos_mes
-    meta_mensal_bruta = meta_diaria_base * (dias_trabalho_semana * 4) if dias_trabalho_semana > 0 else 0
-    
-    custos_fixos_total_ativos = db.session.query(func.sum(Custo.valor)).filter(
-        Custo.user_id == current_user.id, Custo.is_active == True
-    ).scalar() or 0
-    projecao_lucro_operacional = meta_mensal_bruta - custos_variaveis_mes - abastecimentos_mes - custos_fixos_total_ativos
 
-    registros_custos = current_user.registros_custo.filter(extract('year', RegistroCusto.data_vencimento) == year, extract('month', RegistroCusto.data_vencimento) == month).join(Custo).order_by(RegistroCusto.data_vencimento).all()
-    
-    # --- CORREÇÃO APLICADA AQUI ---
-    # O total agora soma o valor apenas dos registros cujo custo principal está ATIVO.
-    custos_fixos_total_mes = sum(rc.valor for rc in registros_custos if rc.custo.is_active)
+    meta_diaria_base = 0
+    if (parametro.dias_trabalho_semana or 0) > 0 and parametro.meta_faturamento > 0:
+        if parametro.periodicidade_meta == 'diaria': meta_diaria_base = parametro.meta_faturamento
+        elif parametro.periodicidade_meta == 'semanal': meta_diaria_base = parametro.meta_faturamento / parametro.dias_trabalho_semana
+        elif parametro.periodicidade_meta == 'mensal': meta_diaria_base = parametro.meta_faturamento / (parametro.dias_trabalho_semana * 4.33)
 
-    # --- LÓGICA DO EXTRATO (Sua lógica original) ---
+    meta_mensal_bruta = meta_diaria_base * (parametro.dias_trabalho_semana * 4) if (parametro.dias_trabalho_semana and parametro.dias_trabalho_semana > 0) else 0
+    
+    # ========= CORREÇÃO APLICADA AQUI =========
+    # A projeção agora NÃO subtrai os custos fixos.
+    projecao_lucro_operacional = meta_mensal_bruta - custos_variaveis_mes - abastecimentos_mes
+    
     extrato_diario = []
     lancamentos_mes = current_user.lancamentos_diarios.filter(extract('year', LancamentoDiario.data) == year, extract('month', LancamentoDiario.data) == month).order_by(LancamentoDiario.data.desc()).all()
     for lancamento in lancamentos_mes:
@@ -498,28 +480,23 @@ def dashboard():
         km_rodado = lancamento.km_rodado
         valor_km = (faturamento_realizado / km_rodado) if km_rodado > 0 else 0
         cor_km = 'danger'
-        if parametro.valor_km_meta and valor_km > parametro.valor_km_meta:
-            cor_km = 'success'
-        elif parametro.valor_km_minimo and valor_km >= parametro.valor_km_minimo:
-            cor_km = 'warning'
+        if parametro.valor_km_meta and valor_km > parametro.valor_km_meta: cor_km = 'success'
+        elif parametro.valor_km_minimo and valor_km >= parametro.valor_km_minimo: cor_km = 'warning'
         extrato_diario.append({'data': lancamento.data, 'faturamento_realizado': faturamento_realizado, 'meta_esperada': meta_diaria_base, 'valor_km': valor_km, 'cor_km': cor_km})
-        
-    form = RegistroCustoForm()
-    if form.validate_on_submit():
-        registro = RegistroCusto.query.get(form.registro_id.data)
-        if registro and registro.user_id == current_user.id:
-            registro.pago = form.pago.data
-            registro.data_pagamento = today if registro.pago else None
-            db.session.commit()
-            flash('Status do custo atualizado!', 'success')
-            return redirect(url_for('main.dashboard', year=year, month=month))
+
+    faturamento_ontem = db.session.query(func.sum(Faturamento.valor)).filter(Faturamento.user_id == current_user.id, Faturamento.data == (date.today() - timedelta(days=1))).scalar() or 0
+    meta_ajustada_para_hoje = meta_diaria_base - (faturamento_ontem - meta_diaria_base)
+    faturamento_hoje = db.session.query(func.sum(Faturamento.valor)).filter(Faturamento.user_id == current_user.id, Faturamento.data == date.today()).scalar() or 0
+    meta_restante_hoje = meta_ajustada_para_hoje - faturamento_hoje
+
+    form = RegistroCustoForm() # Necessário para o modal de pagamento, se houver
 
     return render_template(
         'dashboard.html',
         title='Dashboard Financeiro',
         parametro=parametro,
         meta_restante_hoje=meta_restante_hoje,
-        meta_hoje_atingida=meta_hoje_atingida,
+        meta_hoje_atingida=(meta_restante_hoje <= 0),
         meta_ajustada_para_hoje=meta_ajustada_para_hoje,
         meta_diaria_base=meta_diaria_base,
         faturamento_bruto_real_mes=faturamento_bruto_real_mes,
@@ -527,12 +504,13 @@ def dashboard():
         meta_mensal_bruta=meta_mensal_bruta,
         projecao_lucro_operacional=projecao_lucro_operacional,
         extrato_diario=extrato_diario,
-        registros_custos=registros_custos,
+        registros_custos=registros_custos_mes,
         custos_fixos_total=custos_fixos_total_mes,
         current_month=month,
         current_year=year,
         form=form
     )
+
 
 
 
