@@ -1,21 +1,23 @@
 import os
 from pathlib import Path
 from flask import Flask
+from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-from .models import (
-    db, User, Faturamento, Parametros, CustoFixo,
-    CategoriaCusto, LancamentoDiario, CustoVariavel,
-    TipoCombustivel, Abastecimento
-)
+from flask_login import LoginManager
 from authlib.integrations.flask_client import OAuth
 from dotenv import load_dotenv
-from flask_login import LoginManager
 
-# Carrega as variáveis de ambiente do arquivo .env
+# Carrega variáveis de ambiente
 load_dotenv()
 
 # Caminho absoluto para a raiz do projeto
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Inicializa extensões (sem app ainda)
+db = SQLAlchemy()
+migrate = Migrate()
+login_manager = LoginManager()
+oauth = OAuth()
 
 def create_app():
     app = Flask(
@@ -52,30 +54,35 @@ def create_app():
         GOOGLE_CLIENT_SECRET=os.getenv("GOOGLE_CLIENT_SECRET"),
     )
 
-    # Cria a pasta 'instance' se ela não existir
+    # Cria a pasta 'instance' se não existir
     try:
         (BASE_DIR / "instance").mkdir(exist_ok=True)
     except OSError:
         pass
 
-    # Inicializa as extensões
+    # Inicializa extensões
     db.init_app(app)
-    migrate = Migrate(app, db)
-
-    login_manager = LoginManager()
+    migrate.init_app(app, db)
     login_manager.init_app(app)
+    oauth.init_app(app)
+
     login_manager.login_view = "main.login"
     login_manager.login_message = "Por favor, faça o login para acessar esta página."
     login_manager.login_message_category = "info"
 
+    # Importa modelos e blueprints dentro do contexto da app
+    with app.app_context():
+        from . import models
+        from .main import bp as main_bp
+        app.register_blueprint(main_bp)
+
+    # Configuração do user_loader
+    from .models import User
     @login_manager.user_loader
     def load_user(user_id):
         return User.query.get(int(user_id))
 
     # Configuração do OAuth
-    oauth = OAuth(app)
-    app.oauth = oauth
-
     domain = os.getenv("APP_DOMAIN", f"http://localhost:{os.environ.get('PORT', 8080)}")
     google_redirect_uri = f"{domain}/authorize"
 
@@ -87,9 +94,5 @@ def create_app():
         client_kwargs={"scope": "openid email profile"},
         redirect_uri=google_redirect_uri,
     )
-
-    # Registra o Blueprint
-    from app.main import bp as main_bp
-    app.register_blueprint(main_bp, url_prefix="/")
 
     return app

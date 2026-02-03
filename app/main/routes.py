@@ -1,18 +1,26 @@
-from flask import render_template, request, redirect, url_for, flash, current_app
-from datetime import datetime, timedelta
-import calendar
+from flask import render_template, flash, redirect, url_for, request, session, jsonify, abort
+from flask_login import login_user, logout_user, current_user, login_required
+from . import bp
+from app import db, oauth
+from app.models import (
+    User, Parametros, Custo, RegistroCusto,
+    CategoriaCusto, CustoVariavel, LancamentoDiario,
+    Faturamento, Abastecimento, TipoCombustivel
+)
+
+from .forms import LoginForm, RegistrationForm, CustoForm
+from urllib.parse import urlsplit
+from datetime import datetime, timedelta, date
+from sqlalchemy import extract, func
+from calendar import monthrange
 import locale
-from . import bp as main
-from .forms import LoginForm, RegistrationForm
-from ..models import db, Parametros, CustoFixo, CategoriaCusto, LancamentoDiario, CustoVariavel, Abastecimento, TipoCombustivel, Faturamento, User
-from flask_login import login_user, logout_user, login_required, current_user
 
 # Configura o locale para Português do Brasil
 locale.setlocale(locale.LC_TIME, 'pt_BR.UTF-8')
 
 # --- ROTAS DE AUTENTICAÇÃO ---
 
-@main.route("/login", methods=['GET', 'POST'])
+@bp.route("/login", methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
         return redirect(url_for('main.index'))
@@ -30,7 +38,7 @@ def login():
         
     return render_template("login.html", form=form)
 
-@main.route("/register", methods=['GET', 'POST'])
+@bp.route("/register", methods=['GET', 'POST'])
 def register():
     if current_user.is_authenticated:
         return redirect(url_for('main.index'))
@@ -47,12 +55,12 @@ def register():
 
     return render_template('register.html', form=form)
 
-@main.route("/login/google")
+@bp.route("/login/google")
 def login_google():
     redirect_uri = url_for('main.authorize', _external=True)
     return current_app.oauth.google.authorize_redirect(redirect_uri)
 
-@main.route("/authorize")
+@bp.route("/authorize")
 def authorize():
     token = current_app.oauth.google.authorize_access_token()
     user_info = current_app.oauth.google.get('https://www.googleapis.com/oauth2/v2/userinfo').json()
@@ -79,7 +87,7 @@ def authorize():
     login_user(user, remember=True)
     return redirect(url_for('main.index'))
 
-@main.route("/logout")
+@bp.route("/logout")
 @login_required
 def logout():
     logout_user()
@@ -88,7 +96,7 @@ def logout():
 
 # --- ROTAS DA APLICAÇÃO ---
 
-@main.route("/", methods=['GET', 'POST'])
+@bp.route("/", methods=['GET', 'POST'])
 @login_required
 def index():
     parametro = Parametros.query.first()
@@ -106,14 +114,11 @@ def index():
         if not lancamento_diario:
             lancamento_diario = LancamentoDiario(data=data, km_rodado=0, parametro_id=parametro.id)
             db.session.add(lancamento_diario)
-            db.session.flush() # Garante que o lancamento_diario tenha um ID para o relacionamento
+            db.session.flush() 
 
         if form_type == 'desempenho':
-            # Acumula os KMs rodados em vez de substituir
             km_adicional = int(request.form.get('kmRodado') or 0)
             lancamento_diario.km_rodado += km_adicional
-            
-            # REMOVIDO: Faturamento.query.filter_by(lancamento_id=lancamento_diario.id).delete()
             
             valores = request.form.getlist('faturamentoValor')
             tipos = request.form.getlist('faturamentoTipo')
@@ -137,14 +142,14 @@ def index():
                         fonte_final = fonte_customizada if fonte_customizada else 'Outro'
                     else:
                         fonte_final = fonte_selecionada
-                else: # Se for 'Especie'
+                else: 
                     fonte_final = 'Espécie'
 
                 novo_faturamento = Faturamento(
                     valor=valor,
                     tipo=tipo,
                     fonte=fonte_final,
-                    lancamento_id=lancamento_diario.id # Associa diretamente ao ID
+                    lancamento_id=lancamento_diario.id
                 )
                 db.session.add(novo_faturamento)
                 faturamentos_adicionados += 1
@@ -186,7 +191,7 @@ def index():
                         descricao=descricao_custo if descricao_custo else 'Custo sem descrição',
                         valor=float(valor_custo_str),
                         categoria_id=categoria_id_final,
-                        lancamento_id=lancamento_diario.id # Associa diretamente ao ID
+                        lancamento_id=lancamento_diario.id
                     )
                     db.session.add(novo_custo_variavel)
                     custos_adicionados += 1
@@ -204,7 +209,69 @@ def index():
     return render_template('index.html', parametro=parametro, categorias=categorias, hoje=hoje)
 
 
-@main.route("/abastecimento", methods=['GET', 'POST'])
+@bp.route('/custos', methods=['GET', 'POST'])
+@login_required
+def custos():
+    custo_form = CustoForm()
+    if 'submit_custo' in request.form and custo_form.validate_on_submit():
+        novo_custo = Custo(
+            nome=custo_form.nome.data,
+            valor=custo_form.valor.data,
+            dia_vencimento=custo_form.dia_vencimento.data,
+            observacao=custo_form.observacao.data,
+            user_id=current_user.id
+        )
+        db.session.add(novo_custo)
+        db.session.commit()
+        flash('Custo recorrente adicionado com sucesso!', 'success')
+        return redirect(url_for('main.custos'))
+
+    custos = Custo.query.filter_by(user_id=current_user.id).all()
+    return render_template('custos.html', title='Custos Recorrentes', form=custo_form, custos=custos)
+
+
+@bp.route("/custos/delete/<int:custo_id>", methods=['GET'])
+@login_required
+def delete_custo(custo_id):
+    custo = Custo.query.get_or_404(custo_id)
+    # Adicionar verificação de permissão se necessário
+    db.session.delete(custo)
+    db.session.commit()
+    flash('Custo excluído com sucesso.', 'success')
+    return redirect(url_for('main.custos'))
+
+
+@bp.route('/custos/delete_definicao/<int:custo_id>', methods=['POST'])
+@login_required
+def delete_definicao_custo(custo_id):
+    custo = Custo.query.get_or_404(custo_id)
+    db.session.delete(custo)
+    db.session.commit()
+    flash('Definição de custo excluída!', 'success')
+    return redirect(url_for('main.cadastro'))
+
+
+@bp.route('/custos/edit_definicao/<int:custo_id>', methods=['GET', 'POST'])
+@login_required
+def edit_definicao_custo(custo_id):
+    custo = Custo.query.get_or_404(custo_id)
+    if custo.user_id != current_user.id:
+        abort(403)
+    
+    form = CustoForm(obj=custo)
+    if form.validate_on_submit():
+        custo.nome = form.nome.data
+        custo.valor = form.valor.data
+        custo.dia_vencimento = form.dia_vencimento.data
+        custo.observacao = form.observacao.data
+        db.session.commit()
+        flash('Definição de custo atualizada com sucesso!', 'success')
+        return redirect(url_for('main.custos'))
+
+    return render_template('edit_definicao_custo.html', form=form, custo=custo, title='Editar Custo')
+
+
+@bp.route("/abastecimento", methods=['GET', 'POST'])
 @login_required
 def abastecimento():
     parametro = Parametros.query.first()
@@ -282,159 +349,150 @@ def abastecimento():
         historico=historico_final
     )
 
-@main.route("/dashboard")
+@bp.route('/dashboard', methods=['GET', 'POST'])
 @login_required
 def dashboard():
-    parametro = Parametros.query.first()
-    if not parametro:
-        return render_template('dashboard.html', parametro=None)
+    today = date.today()
+    year = request.args.get('year', today.year, type=int)
+    month = request.args.get('month', today.month, type=int)
 
-    # --- Cálculos Iniciais e Metas ---
-    total_custos_fixos = sum(c.valor for c in parametro.custos_fixos)
-    hoje = datetime.utcnow().date()
-    dias_no_mes = calendar.monthrange(hoje.year, hoje.month)[1]
-    
-    dias_uteis_no_mes_estimado = 0
-    if parametro.dias_trabalho_semana > 0:
-        dias_uteis_no_mes_estimado = (dias_no_mes * (parametro.dias_trabalho_semana / 7))
+    parametros = Parametros.query.filter_by(user_id=current_user.id).first()
+    if not parametros:
+        flash('Por favor, configure seus parâmetros na página de cadastro primeiro.', 'warning')
+        return redirect(url_for('main.cadastro'))
 
-    meta_mensal_bruta = 0
-    if parametro.periodicidade_meta == 'mensal':
-        meta_mensal_bruta = parametro.meta_faturamento
-    elif parametro.periodicidade_meta == 'semanal':
-        semanas_no_mes = dias_no_mes / 7
-        meta_mensal_bruta = parametro.meta_faturamento * semanas_no_mes
-    elif parametro.periodicidade_meta == 'diaria':
-        if dias_uteis_no_mes_estimado > 0:
-            meta_mensal_bruta = parametro.meta_faturamento * dias_uteis_no_mes_estimado
-    
-    meta_mensal_objetivo = meta_mensal_bruta
-    if parametro.tipo_meta == 'liquida':
-        meta_mensal_objetivo += total_custos_fixos 
-
-    # --- AJUSTE PARA DATA DE CADASTRO ---
-    primeiro_dia_mes = hoje.replace(day=1)
-    user_creation_date = current_user.created_at.date()
-    start_date = max(primeiro_dia_mes, user_creation_date)
-
-    # --- Lançamentos e Desempenho Realizado ---
-    lancamentos_mes = LancamentoDiario.query.filter(
-        LancamentoDiario.parametro_id == parametro.id,
-        LancamentoDiario.data >= start_date,
-        LancamentoDiario.data <= hoje
-    ).all()
-
-    faturamento_realizado_mes = sum(l.faturamento_total for l in lancamentos_mes)
-    km_rodados_mes = sum(l.km_rodado for l in lancamentos_mes)
-    custos_variaveis_mes = sum(l.custos_variaveis_total for l in lancamentos_mes)
-    
-    desempenho_realizado_mes = faturamento_realizado_mes
-    if parametro.tipo_meta == 'liquida':
-        desempenho_realizado_mes -= custos_variaveis_mes
-
-    # --- Cálculo de Saldo e Metas Ajustadas ---
-    meta_diaria_base = (meta_mensal_objetivo / dias_uteis_no_mes_estimado) if dias_uteis_no_mes_estimado > 0 else 0
-    
-    dias_passados_desde_inicio = (hoje - start_date).days
-    dias_trabalhados_estimados_no_periodo = dias_passados_desde_inicio * (parametro.dias_trabalho_semana / 7)
-    desempenho_esperado_periodo = meta_diaria_base * dias_trabalhados_estimados_no_periodo
-    saldo_mes = desempenho_realizado_mes - desempenho_esperado_periodo
-    
-    # --- NOVO CÁLCULO PARA "META DE PERFORMANCE PARA HOJE" ---
-    
-    # 1. Isola a performance de hoje
-    lancamento_hoje = next((l for l in lancamentos_mes if l.data == hoje), None)
-    performance_hoje = 0
-    if lancamento_hoje:
-        performance_hoje = lancamento_hoje.faturamento_total
-        if parametro.tipo_meta == 'liquida':
-            performance_hoje -= lancamento_hoje.custos_variaveis_total
-            
-    # 2. Calcula o desempenho realizado ATÉ ONTEM.
-    desempenho_realizado_ate_ontem = desempenho_realizado_mes - performance_hoje
-    
-    # 3. Calcula a meta restante do mês, baseada no desempenho até ontem.
-    meta_restante_mes = meta_mensal_objetivo - desempenho_realizado_ate_ontem
-    
-    # 4. Calcula os dias úteis restantes, incluindo hoje.
-    dias_uteis_restantes = 0
-    if parametro.dias_trabalho_semana > 0:
-        dias_uteis_restantes = (dias_no_mes - hoje.day + 1) * (parametro.dias_trabalho_semana / 7)
+    definicoes_custos = Custo.query.filter_by(user_id=current_user.id).all()
+    for definicao in definicoes_custos:
+        dia_vencimento_seguro = get_safe_day(definicao.dia_vencimento)
         
-    # 5. A meta para hoje é a média necessária nos dias restantes.
-    meta_para_hoje = (meta_restante_mes / dias_uteis_restantes) if dias_uteis_restantes > 0 else meta_restante_mes
-    
-    # 6. O valor final é a meta para hoje MENOS o que já foi feito hoje.
-    meta_diaria_ajustada = meta_para_hoje - performance_hoje
-    
-    # Garante que a meta exibida não seja negativa.
-    if meta_diaria_ajustada < 0:
-        meta_diaria_ajustada = 0
+        try:
+            data_vencimento = date(year, month, dia_vencimento_seguro)
+        except ValueError:
+            _, ultimo_dia = calendar.monthrange(year, month)
+            data_vencimento = date(year, month, ultimo_dia)
 
+        existe = RegistroCusto.query.filter_by(
+            custo_id=definicao.id,
+            user_id=current_user.id
+        ).filter(extract('month', RegistroCusto.data_vencimento) == month, 
+                 extract('year', RegistroCusto.data_vencimento) == year).first()
 
-    # --- Previsões para o Mês ---
-    previsao_faturamento_bruto_mes = 0
-    previsao_lucro_operacional_mes = 0
+        if not existe:
+            novo_registro = RegistroCusto(
+                data_vencimento=data_vencimento,
+                valor=definicao.valor,
+                pago=False,
+                user_id=current_user.id,
+                custo_id=definicao.id
+            )
+            db.session.add(novo_registro)
+    db.session.commit()
+
+    registros_custos = RegistroCusto.query.filter(
+        RegistroCusto.user_id == current_user.id,
+        extract('year', RegistroCusto.data_vencimento) == year,
+        extract('month', RegistroCusto.data_vencimento) == month
+    ).join(Custo).order_by(RegistroCusto.data_vencimento).all()
+
+    form = RegistroCustoForm()
+    if form.validate_on_submit():
+        registro = RegistroCusto.query.get(form.registro_id.data)
+        if registro and registro.user_id == current_user.id:
+            registro.pago = form.pago.data
+            registro.data_pagamento = today if registro.pago else None
+            db.session.commit()
+            flash('Status do custo atualizado!', 'success')
+            return redirect(url_for('main.dashboard', year=year, month=month))
+        else:
+            flash('Registro de custo inválido.', 'danger')
+
+    custos_fixos_pagos = sum(rc.valor for rc in registros_custos if rc.pago)
+    custos_fixos_pendentes = sum(rc.valor for rc in registros_custos if not rc.pago)
     
-    dias_com_lancamento_total = db.session.query(db.func.count(db.distinct(LancamentoDiario.data))).filter(
-        LancamentoDiario.parametro_id == parametro.id, 
-        LancamentoDiario.data >= start_date, 
-        LancamentoDiario.data <= hoje
+    custos_fixos_total = db.session.query(func.sum(Custo.valor)).filter(Custo.user_id == current_user.id).scalar() or 0
+    
+    total_faturamento_bruto = db.session.query(func.sum(Faturamento.valor)).filter(
+        Faturamento.user_id == current_user.id,
+        extract('year', Faturamento.data) == year,
+        extract('month', Faturamento.data) == month
     ).scalar() or 0
 
-    if dias_com_lancamento_total > 0:
-        faturamento_medio_diario = faturamento_realizado_mes / dias_com_lancamento_total
-        previsao_faturamento_bruto_mes = faturamento_medio_diario * dias_uteis_no_mes_estimado
-        
-        custo_variavel_por_km = (custos_variaveis_mes / km_rodados_mes) if km_rodados_mes > 0 else 0
-        km_medio_diario = km_rodados_mes / dias_com_lancamento_total
-        previsao_km_total_mes = km_medio_diario * dias_uteis_no_mes_estimado
-        previsao_custos_variaveis_mes = previsao_km_total_mes * custo_variavel_por_km
-        previsao_lucro_operacional_mes = previsao_faturamento_bruto_mes - previsao_custos_variaveis_mes
+    total_custos_variaveis = db.session.query(func.sum(CustoVariavel.valor)).filter(
+        CustoVariavel.user_id == current_user.id,
+        extract('year', CustoVariavel.data) == year,
+        extract('month', CustoVariavel.data) == month
+    ).scalar() or 0
 
-    # --- Extrato Diário ---
-    extrato_diario = []
-    lancamentos_por_data = {l.data: l for l in lancamentos_mes}
-    dia_corrente = hoje
+    lucro_liquido_parcial = total_faturamento_bruto - total_custos_variaveis - custos_fixos_pagos
     
-    while dia_corrente >= start_date:
-        lancamento = lancamentos_por_data.get(dia_corrente)
-        performance_dia = 0
-        valor_km_dia = 0
-        if lancamento:
-            performance_dia = lancamento.faturamento_total
-            if parametro.tipo_meta == 'liquida':
-                performance_dia -= lancamento.custos_variaveis_total
-            if lancamento.km_rodado > 0:
-                valor_km_dia = lancamento.faturamento_total / lancamento.km_rodado
-        
-        saldo_do_dia = performance_dia - meta_diaria_base
+    dias_trabalhados = db.session.query(func.count(func.distinct(Faturamento.data))).filter(
+        Faturamento.user_id == current_user.id,
+        extract('year', Faturamento.data) == year,
+        extract('month', Faturamento.data) == month
+    ).scalar() or 0
 
-        extrato_diario.append({
-            'data': dia_corrente,
-            'performance': performance_dia,
-            'meta_esperada': meta_diaria_base,
-            'saldo': saldo_do_dia,
-            'valor_km': valor_km_dia
-        })
-        dia_corrente -= timedelta(days=1)
+    meta_faturamento_mensal = parametros.meta_faturamento or 0
+    if parametros.periodicidade_meta == 'diaria':
+        meta_faturamento_mensal *= (parametros.dias_trabalho_semana or 0) * 4
+    elif parametros.periodicidade_meta == 'semanal':
+        meta_faturamento_mensal *= 4
 
-    return render_template('dashboard.html', 
-        parametro=parametro, 
-        total_custos_fixos=total_custos_fixos,
-        meta_diaria_ajustada=meta_diaria_ajustada,
-        faturamento_realizado_mes=faturamento_realizado_mes,
-        saldo_mes=saldo_mes,
-        km_rodados_mes=km_rodados_mes,
-        previsao_faturamento_bruto_mes=previsao_faturamento_bruto_mes,
-        previsao_lucro_operacional_mes=previsao_lucro_operacional_mes,
-        extrato_diario=extrato_diario,
-        meta_mensal_objetivo=meta_mensal_objetivo
+    atingimento_meta_bruta = (total_faturamento_bruto / meta_faturamento_mensal * 100) if meta_faturamento_mensal > 0 else 0
+    
+    faturamento_liquido_parcial = total_faturamento_bruto - total_custos_variaveis
+    meta_liquida = meta_faturamento_mensal
+    if parametros.tipo_meta == 'liquida':
+        atingimento_meta_liquida = (faturamento_liquido_parcial / meta_liquida * 100) if meta_liquida > 0 else 0
+    else:
+        atingimento_meta_liquida = 0
+
+    dias_no_mes = calendar.monthrange(year, month)[1]
+    dias_restantes = dias_no_mes - today.day if today.month == month and today.year == year else 0
+    media_diaria_bruta = total_faturamento_bruto / dias_trabalhados if dias_trabalhados > 0 else 0
+    projecao_faturamento_bruto = total_faturamento_bruto + (media_diaria_bruta * ( (parametros.dias_trabalho_semana or 0) * (dias_restantes / 7) ))
+    
+    media_diaria_liquida = faturamento_liquido_parcial / dias_trabalhados if dias_trabalhados > 0 else 0
+    projecao_faturamento_liquido = faturamento_liquido_parcial + (media_diaria_liquida * ( (parametros.dias_trabalho_semana or 0) * (dias_restantes / 7) ))
+    projecao_lucro_liquido = projecao_faturamento_liquido - custos_fixos_total
+
+    faturamentos_diarios = db.session.query(
+        extract('day', Faturamento.data).label('dia'),
+        func.sum(Faturamento.valor).label('total')
+    ).filter(
+        Faturamento.user_id == current_user.id,
+        extract('year', Faturamento.data) == year,
+        extract('month', Faturamento.data) == month
+    ).group_by('dia').order_by('dia').all()
+
+    labels = [f['dia'] for f in faturamentos_diarios]
+    data = [f['total'] for f in faturamentos_diarios]
+
+    return render_template(
+        'dashboard.html',
+        title='Dashboard Financeiro',
+        registros_custos=registros_custos,
+        custos_fixos_pagos=custos_fixos_pagos,
+        custos_fixos_pendentes=custos_fixos_pendentes,
+        custos_fixos_total=custos_fixos_total,
+        total_faturamento_bruto=total_faturamento_bruto,
+        total_custos_variaveis=total_custos_variaveis,
+        lucro_liquido_parcial=lucro_liquido_parcial,
+        dias_trabalhados=dias_trabalhados,
+        meta_faturamento_mensal=meta_faturamento_mensal,
+        atingimento_meta_bruta=atingimento_meta_bruta,
+        atingimento_meta_liquida=atingimento_meta_liquida,
+        projecao_faturamento_bruto=projecao_faturamento_bruto,
+        projecao_lucro_liquido=projecao_lucro_liquido,
+        current_month=month,
+        current_year=year,
+        labels=labels,
+        data=data,
+        form=form
     )
 
 
 
-@main.route("/categorias", methods=['GET', 'POST'])
+@bp.route("/categorias", methods=['GET', 'POST'])
 @login_required
 def categorias():
     if request.method == 'POST':
@@ -453,63 +511,95 @@ def categorias():
     todas_categorias = CategoriaCusto.query.order_by(CategoriaCusto.nome).all()
     return render_template('categorias.html', categorias=todas_categorias)
 
-
-@main.route("/cadastro", methods=['GET', 'POST'])
+@bp.route('/cadastro', methods=['GET', 'POST'])
 @login_required
 def cadastro():
-    parametro_existente = Parametros.query.first()
+    parametro = current_user.parametros
+    custo_form = CustoForm()
+    # Verifica se já existe algum abastecimento para decidir se os campos devem ser editáveis
+    has_abastecimentos = Abastecimento.query.filter_by(user_id=current_user.id).first() is not None
+
     if request.method == 'POST':
-        parametro_alvo = parametro_existente if parametro_existente else Parametros()
+        if 'submit_parametros' in request.form:
+            if not parametro:
+                parametro = Parametros(user_id=current_user.id)
+                db.session.add(parametro)
+            
+            parametro.modelo_carro = request.form.get('modelo_carro')
+            parametro.placa_carro = request.form.get('placa_carro')
+            
+            # Apenas atualiza KM e Consumo se for o cadastro inicial (sem abastecimentos)
+            if not has_abastecimentos:
+                km_str = request.form.get('km_atual')
+                consumo_str = request.form.get('media_consumo')
+                parametro.km_atual = int(km_str) if km_str and km_str.isdigit() else 0
+                parametro.media_consumo = float(consumo_str) if consumo_str and consumo_str.replace('.', '', 1).isdigit() else 0.0
 
-        parametro_alvo.modelo_carro = request.form.get('modeloCarro')
-        parametro_alvo.placa_carro = request.form.get('placaCarro')
-        parametro_alvo.km_atual = int(request.form.get('kmAtual'))
-        parametro_alvo.media_consumo = float(request.form.get('mediaConsumo'))
-        parametro_alvo.meta_faturamento = float(request.form.get('metaFaturamento'))
-        parametro_alvo.valor_km_minimo = float(request.form.get('valorKmMinimo'))
-        parametro_alvo.valor_km_meta = float(request.form.get('valorKmMeta'))
-        parametro_alvo.periodicidade_meta = request.form.get('periodicidadeMeta')
-        parametro_alvo.tipo_meta = request.form.get('tipoMeta')
-        parametro_alvo.dias_trabalho_semana = int(request.form.get('diasTrabalhoSemana'))
+            dias_str = request.form.get('dias_trabalho_semana')
+            meta_str = request.form.get('meta_faturamento')
+            parametro.dias_trabalho_semana = int(dias_str) if dias_str and dias_str.isdigit() else 0
+            parametro.meta_faturamento = float(meta_str) if meta_str and meta_str.replace('.', '', 1).isdigit() else 0.0
+            
+            parametro.periodicidade_meta = request.form.get('periodicidade_meta')
+            parametro.tipo_meta = request.form.get('tipo_meta')
 
-        if not parametro_existente:
-            db.session.add(parametro_alvo)
-        
-        parametro_alvo.custos_fixos.clear()
-        custo_nomes = request.form.getlist('custoNome')
-        custo_valores = request.form.getlist('custoValor')
+            try:
+                db.session.commit()
+                flash('Parâmetros atualizados com sucesso!', 'success')
+            except Exception as e:
+                db.session.rollback()
+                flash(f'Erro ao salvar os parâmetros: {e}', 'danger')
+            
+            return redirect(url_for('main.cadastro'))
 
-        for nome, valor_str in zip(custo_nomes, custo_valores):
-            if nome and valor_str:
-                novo_custo = CustoFixo(nome=nome, valor=float(valor_str), parametro=parametro_alvo)
-                db.session.add(novo_custo)
+        elif 'submit' in request.form and custo_form.validate_on_submit():
+            novo_custo = Custo(
+                nome=custo_form.nome.data,
+                valor=custo_form.valor.data,
+                dia_vencimento=custo_form.dia_vencimento.data,
+                observacao=custo_form.observacao.data,
+                user_id=current_user.id
+            )
+            db.session.add(novo_custo)
+            db.session.commit()
+            flash('Novo custo recorrente adicionado com sucesso!', 'success')
+            return redirect(url_for('main.cadastro'))
 
-        db.session.commit()
-        flash('Parâmetros salvos com sucesso!', 'success')
-        return redirect(url_for('main.dashboard'))
-
-    return render_template('cadastro.html', parametro=parametro_existente)
+    custos = Custo.query.filter_by(user_id=current_user.id).order_by(Custo.nome).all()
+    
+    return render_template('cadastro.html', title='Cadastros e Parâmetros', 
+                           parametro=parametro, custos=custos, custo_form=custo_form, 
+                           is_initial_setup=(not has_abastecimentos))
 
 
 def recalcular_medias(parametro_id):
-    abastecimentos = Abastecimento.query.filter_by(parametro_id=parametro_id).order_by(Abastecimento.data, Abastecimento.km_atual).all()
+    abastecimentos = Abastecimento.query.filter_by(parametro_id=parametro_id).order_by(
+        Abastecimento.data, Abastecimento.km_atual
+    ).all()
     parametro = Parametros.query.get(parametro_id)
     
     total_km_rodados = 0
     total_litros_consumidos = 0
 
+    # zera médias calculadas
     for abs in abastecimentos:
         abs.media_consumo_calculada = None
 
-    tanques_cheios = sorted([abs for abs in abastecimentos if abs.tanque_cheio], key=lambda x: (x.data, x.km_atual))
+    # pega apenas abastecimentos com tanque cheio
+    tanques_cheios = sorted(
+        [abs for abs in abastecimentos if abs.tanque_cheio],
+        key=lambda x: (x.data, x.km_atual)
+    )
 
     for i in range(len(tanques_cheios) - 1):
         inicio = tanques_cheios[i]
         fim = tanques_cheios[i+1]
 
         km_rodados_periodo = fim.km_atual - inicio.km_atual
-        
-        litros_consumidos_periodo = sum(a.litros for a in abastecimentos if inicio.data < a.data <= fim.data and inicio.km_atual < a.km_atual <= fim.km_atual)
+        litros_consumidos_periodo = sum(
+            a.litros for a in abastecimentos
+            if inicio.data < a.data <= fim.data and inicio.km_atual < a.km_atual <= fim.km_atual
+        )
 
         if litros_consumidos_periodo > 0:
             media_periodo = km_rodados_periodo / litros_consumidos_periodo
@@ -535,63 +625,26 @@ def recalcular_medias(parametro_id):
     db.session.commit()
 
 
-
-@main.route('/abastecimento/editar/<int:id>', methods=['GET', 'POST'])
+# --- TOGGLE PAGO ---
+@bp.route('/custo/toggle_pago/<int:registro_id>', methods=['POST'])
 @login_required
-def editar_abastecimento(id):
-    abastecimento = Abastecimento.query.get_or_404(id)
-    parametro = Parametros.query.first()
-    if not parametro or abastecimento.parametro_id != parametro.id:
-        abort(403)
+def toggle_pago(registro_id):
+    registro = RegistroCusto.query.get_or_404(registro_id)
+    
+    registro.pago = not registro.pago
+    registro.data_pagamento = date.today() if registro.pago else None
+    
+    db.session.commit()
 
-    if request.method == 'POST':
-        try:
-            abastecimento.data = datetime.strptime(request.form['data'], '%Y-%m-%d').date()
-            abastecimento.km_atual = int(request.form['kmAtual'])
-            abastecimento.litros = float(request.form['litros'])
-            abastecimento.preco_por_litro = float(request.form['precoPorLitro'])
-            abastecimento.custo_total = float(request.form['custoTotal'])
-            abastecimento.tanque_cheio = 'tanqueCheio' in request.form
-            
-            tipo_combustivel_id = request.form.get('tipoCombustivel')
-            if tipo_combustivel_id and tipo_combustivel_id.isdigit():
-                 abastecimento.tipo_combustivel_id = int(tipo_combustivel_id)
-
-            db.session.commit()
-            
-            recalcular_medias(parametro.id)
-            db.session.commit()
-
-            flash('Abastecimento atualizado com sucesso!', 'success')
-            return redirect(url_for('main.abastecimento'))
-        except Exception as e:
-            db.session.rollback()
-            current_app.logger.error(f'Erro ao atualizar o abastecimento: {e}')
-            flash(f'Erro ao atualizar o abastecimento.', 'danger')
-            
-    tipos_combustivel = TipoCombustivel.query.order_by(TipoCombustivel.nome).all()
-    return render_template('editar_abastecimento.html', abastecimento=abastecimento, tipos_combustivel=tipos_combustivel, parametro=parametro)
+    flash(f'Custo \"{registro.custo.nome}\" marcado como {("pago" if registro.pago else "pendente")}.', 'success')
+    
+    year = registro.data_vencimento.year
+    month = registro.data_vencimento.month
+    return redirect(url_for('main.custos', year=year, month=month))
 
 
-@main.route('/abastecimento/excluir/<int:id>', methods=['POST'])
-@login_required
-def excluir_abastecimento(id):
-    abastecimento = Abastecimento.query.get_or_404(id)
-    parametro = Parametros.query.first()
-    if not parametro or abastecimento.parametro_id != parametro.id:
-        abort(403)
-
-    try:
-        db.session.delete(abastecimento)
-        db.session.commit()
-        
-        recalcular_medias(parametro.id)
-        db.session.commit()
-            
-        flash('Abastecimento excluído com sucesso!', 'success')
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f'Erro ao excluir o abastecimento: {e}')
-        flash(f'Erro ao excluir o abastecimento.', 'danger')
-        
-    return redirect(url_for('main.abastecimento'))
+# --- FUNÇÃO AUXILIAR ---
+def get_safe_day(year, month, day):
+    """Retorna o último dia do mês se o dia for inválido."""
+    _, last_day = calendar.monthrange(year, month)
+    return min(day, last_day)

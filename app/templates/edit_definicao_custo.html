@@ -1,0 +1,115 @@
+{% extends "base.html" %} {% block title %}{{ title }}{% endblock %} {% block
+content %}
+<div class="container mx-auto px-4 py-8">
+  <h1 class="text-3xl font-bold mb-6 text-gray-800">{{ title }}</h1>
+
+  <div class="bg-white shadow-md rounded-lg p-6">
+    <form
+      action="{{ url_for('main.edit_definicao_custo', custo_id=custo.id) }}"
+      method="POST"
+      novalidate
+    >
+      {{ form.hidden_tag() }}
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Campo Nome do Custo -->
+        <div class="form-group">
+          <label for="nome" class="block text-sm font-medium text-gray-700"
+            >{{ form.nome.label }}</label
+          >
+          {{ form.nome(class_="mt-1 block w-full px-3 py-2 bg-white border
+          border-gray-300 rounded-md shadow-sm placeholder-gray-400
+          focus:outline-none focus:ring-indigo-500 focus:border-indigo-500
+          sm:text-sm", placeholder="Ex: Aluguel, Seguro do Carro") }} {% if
+          form.nome.errors %}
+          <div class="text-red-500 text-xs mt-1">
+            {% for error in form.nome.errors %}
+            <span>{{ error }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+
+        <!-- Campo Valor -->
+        <div class="form-group">
+          <label for="valor" class="block text-sm font-medium text-gray-700"
+            >{{ form.valor.label }}</label
+          >
+          <div class="relative mt-1 rounded-md shadow-sm">
+            <div
+              class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3"
+            >
+              <span class="text-gray-500 sm:text-sm">R$</span>
+            </div>
+            {{ form.valor(class_="block w-full rounded-md border-gray-300 pl-10
+            pr-4 py-2 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm",
+            placeholder="0.00") }}
+          </div>
+          {% if form.valor.errors %}
+          <div class="text-red-500 text-xs mt-1">
+            {% for error in form.valor.errors %}
+            <span>{{ error }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+
+        <!-- Campo Dia do Vencimento -->
+        <div class="form-group">
+          <label
+            for="dia_vencimento"
+            class="block text-sm font-medium text-gray-700"
+            >{{ form.dia_vencimento.label }}</label
+          >
+          {{ form.dia_vencimento(class_="mt-1 block w-full px-3 py-2 bg-white
+          border border-gray-300 rounded-md shadow-sm focus:outline-none
+          focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm") }} {% if
+          form.dia_vencimento.errors %}
+          <div class="text-red-500 text-xs mt-1">
+            {% for error in form.dia_vencimento.errors %}
+            <span>{{ error }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+
+        <!-- Campo Observação -->
+        <div class="form-group md:col-span-2">
+          <label
+            for="observacao"
+            class="block text-sm font-medium text-gray-700"
+            >{{ form.observacao.label }}</label
+          >
+          {{ form.observacao(rows=3, class_="mt-1 block w-full px-3 py-2
+          bg-white border border-gray-300 rounded-md shadow-sm
+          placeholder-gray-400 focus:outline-none focus:ring-indigo-500
+          focus:border-indigo-500 sm:text-sm", placeholder="Alguma informação
+          adicional sobre o custo.") }} {% if form.observacao.errors %}
+          <div class="text-red-500 text-xs mt-1">
+            {% for error in form.observacao.errors %}
+            <span>{{ error }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Botões de Ação -->
+      <div class="mt-8 flex justify-end space-x-4">
+        <a
+          href="{{ url_for('main.custos') }}"
+          class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+        >
+          Cancelar
+        </a>
+        <button
+          type="submit"
+          class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+        >
+          Salvar Alterações
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

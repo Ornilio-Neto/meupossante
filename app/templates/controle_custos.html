@@ -1,0 +1,126 @@
+{% extends "base.html" %} {% block title %}Controle de Custos Mensais{% endblock
+%} {% block content %}
+<div class="container mt-4">
+  <!-- Cabeçalho e Navegação de Mês -->
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <a
+      href="{{ url_for('main.custos', year=prev_month_date.year, month=prev_month_date.month) }}"
+      class="btn btn-outline-secondary"
+      >&lt; Mês Anterior</a
+    >
+    <h1 class="text-center mb-0">
+      {{ current_month_date.strftime("%B de %Y").capitalize() }}
+    </h1>
+    <a
+      href="{{ url_for('main.custos', year=next_month_date.year, month=next_month_date.month) }}"
+      class="btn btn-outline-secondary"
+      >Próximo Mês &gt;</a
+    >
+  </div>
+
+  <!-- Resumo do Mês -->
+  <div class="row mb-4 text-center">
+    <div class="col-md-6">
+      <div class="card bg-light">
+        <div class="card-body">
+          <h5 class="card-title">Total Previsto</h5>
+          <p class="card-text fs-4 fw-bold text-danger">
+            R$ {{ "%.2f"|format(total_previsto) }}
+          </p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card bg-light">
+        <div class="card-body">
+          <h5 class="card-title">Total Pago</h5>
+          <p class="card-text fs-4 fw-bold text-success">
+            R$ {{ "%.2f"|format(total_pago) }}
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabela de Custos do Mês -->
+  <div class="card">
+    <div class="card-header">
+      <h3>Lançamentos do Mês</h3>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-striped table-hover mb-0">
+        <thead>
+          <tr>
+            <th scope="col">Status</th>
+            <th scope="col">Custo</th>
+            <th scope="col">Vencimento</th>
+            <th scope="col">Valor (R$)</th>
+            <th scope="col">Ação</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for registro in registros %} {% set dias_para_vencer =
+          (registro.data_vencimento - today).days %} {% set status_class = '' %}
+          {% if registro.pago %} {% set status_class = 'table-success' %} {%
+          elif dias_para_vencer < 0 %} {% set status_class = 'table-danger' %}
+          {% elif dias_para_vencer <= registro.custo.alerta_dias %} {% set
+          status_class = 'table-warning' %} {% endif %}
+
+          <tr class="{{ status_class }}">
+            <td class="align-middle text-center">
+              {% if registro.pago %}
+              <span class="badge bg-success">Pago</span>
+              {% elif dias_para_vencer < 0 %}
+              <span class="badge bg-danger">Vencido</span>
+              {% elif dias_para_vencer <= registro.custo.alerta_dias %}
+              <span class="badge bg-warning text-dark">Alerta</span>
+              {% else %}
+              <span class="badge bg-secondary">Pendente</span>
+              {% endif %}
+            </td>
+            <td class="align-middle">
+              {{ registro.custo.nome }} {% if registro.custo.observacao %}
+              <small class="d-block text-muted"
+                >{{ registro.custo.observacao }}</small
+              >
+              {% endif %}
+            </td>
+            <td class="align-middle">
+              {{ registro.data_vencimento.strftime('%d/%m/%Y') }}
+            </td>
+            <td class="align-middle fw-bold">
+              {{ "%.2f"|format(registro.valor) }}
+            </td>
+            <td class="align-middle">
+              <form
+                action="{{ url_for('main.toggle_pago', registro_id=registro.id) }}"
+                method="POST"
+              >
+                {% if registro.pago %}
+                <button type="submit" class="btn btn-sm btn-outline-secondary">
+                  Marcar Pendente
+                </button>
+                {% else %}
+                <button type="submit" class="btn btn-sm btn-success">
+                  Marcar como Pago
+                </button>
+                {% endif %}
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="5" class="text-center p-4">
+              Nenhum custo encontrado para este mês.
+              <a href="{{ url_for('main.cadastro') }}"
+                >Cadastre um custo recorrente</a
+              >.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

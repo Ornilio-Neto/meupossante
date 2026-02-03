@@ -1,113 +1,211 @@
 {% extends "base.html" %}
-
-{% block title %}Parâmetros do Veículo{% endblock %}
+{% block title %}Cadastros e Parâmetros{% endblock %}
 
 {% block content %}
+
+{# ========================
+   VARIÁVEIS SEGURAS
+   ======================== #}
+{% set p = parametro if parametro else None %}
+{% set periodicidade = p.periodicidade_meta if p else '' %}
+{% set tipo_meta = p.tipo_meta if p else '' %}
+
 <div class="container mt-4">
-    <h1 class="mb-4">Parâmetros e Custos Fixos</h1>
-    <p class="text-muted">Insira as informações do seu veículo, suas metas e todos os custos que você tem regularmente, independentemente de rodar com o carro (ex: seguro, parcelas, impostos).</p>
-    
-    <form method="POST" class="mt-4">
-        <h4>Informações do Veículo</h4>
-        <div class="row mb-3">
-            <div class="col-md-6">
-                <label for="modeloCarro" class="form-label">Modelo do Carro</label>
-                <input type="text" class="form-control" id="modeloCarro" name="modeloCarro" value="{{ parametro.modelo_carro if parametro else '' }}" required>
-            </div>
-            <div class="col-md-6">
-                <label for="placaCarro" class="form-label">Placa</label>
-                <input type="text" class="form-control" id="placaCarro" name="placaCarro" value="{{ parametro.placa_carro if parametro else '' }}" required>
-            </div>
+  <h1 class="mb-4">Configurações e Cadastros</h1>
+
+  <!-- Mensagens Flash -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="alert alert-{{ category }} alert-dismissible fade show">
+          {{ message }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
-        <div class="row mb-4">
-            <div class="col-md-6">
-                <label for="kmAtual" class="form-label">KM Atual</label>
-                <input type="number" class="form-control" id="kmAtual" name="kmAtual" value="{{ parametro.km_atual if parametro else '' }}" required>
-            </div>
-            <div class="col-md-6">
-                <label for="mediaConsumo" class="form-label">Média de Consumo (KM/L)</label>
-                <input type="number" step="0.1" class="form-control" id="mediaConsumo" name="mediaConsumo" value="{{ parametro.media_consumo if parametro else '' }}" required>
-            </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <!-- Parâmetros Gerais -->
+  <div class="card mb-4">
+    <div class="card-header">
+      <h3>Parâmetros Gerais</h3>
+    </div>
+    <div class="card-body">
+      <form method="POST" action="{{ url_for('main.cadastro') }}">
+        <div class="row g-3">
+
+          <div class="col-md-6">
+            <label class="form-label">Modelo do Carro</label>
+            <input type="text" class="form-control" name="modelo_carro"
+                   value="{{ p.modelo_carro if p else '' }}">
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label">Placa</label>
+            <input type="text" class="form-control" name="placa_carro"
+                   value="{{ p.placa_carro if p else '' }}">
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label">KM Atual</label>
+            <input type="number" class="form-control" name="km_atual"
+                   value="{{ p.km_atual if p else '' }}" {{ 'readonly' if not is_initial_setup else '' }}>
+            <small class="form-text text-muted">
+                {% if is_initial_setup %}
+                    Insira o KM atual do seu veículo. Após o primeiro abastecimento, este campo será atualizado automaticamente.
+                {% else %}
+                    Atualizado automaticamente pela página de abastecimento.
+                {% endif %}
+            </small>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label">Média de Consumo (Km/L)</label>
+            <input type="number" step="0.01" class="form-control" name="media_consumo"
+                   value="{{ p.media_consumo if p else '' }}" {{ 'readonly' if not is_initial_setup else '' }}>
+            <small class="form-text text-muted">
+                {% if is_initial_setup %}
+                    Insira a média de consumo inicial (ex: 12.5). Após os primeiros abastecimentos, será recalculado automaticamente.
+                {% else %}
+                    Calculado automaticamente a partir dos abastecimentos.
+                {% endif %}
+            </small>
+          </div>
+
+          <hr class="my-3">
+
+          <div class="col-md-6">
+            <label class="form-label">Dias de Trabalho na Semana</label>
+            <input type="number" class="form-control" name="dias_trabalho_semana"
+                   value="{{ p.dias_trabalho_semana if p else '' }}">
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label">Meta de Faturamento</label>
+            <input type="number" step="0.01" class="form-control" name="meta_faturamento"
+                   value="{{ p.meta_faturamento if p else '' }}">
+          </div>
+
+          <!-- Periodicidade da Meta -->
+          <div class="col-md-6">
+            <label class="form-label">Periodicidade da Meta</label>
+            <select class="form-select" name="periodicidade_meta">
+              <option value="diaria" {{ 'selected' if periodicidade == 'diaria' else '' }}>Diária</option>
+              <option value="semanal" {{ 'selected' if periodicidade == 'semanal' else '' }}>Semanal</option>
+              <option value="mensal" {{ 'selected' if periodicidade == 'mensal' else '' }}>Mensal</option>
+            </select>
+          </div>
+
+          <!-- Tipo da Meta -->
+          <div class="col-md-6">
+            <label class="form-label">Tipo da Meta</label>
+            <select class="form-select" name="tipo_meta">
+              <option value="bruta" {{ 'selected' if tipo_meta == 'bruta' else '' }}>
+                Bruta (Faturamento Total)
+              </option>
+              <option value="liquida" {{ 'selected' if tipo_meta == 'liquida' else '' }}>
+                Líquida (Faturamento - Custos Variáveis)
+              </option>
+            </select>
+          </div>
+
         </div>
 
-        <h4>Metas e Planejamento</h4>
-        <div class="row mb-3">
-            <div class="col-md-4">
-                <label for="metaFaturamento" class="form-label">Meta de Faturamento (R$)</label>
-                <input type="number" step="100" class="form-control" id="metaFaturamento" name="metaFaturamento" value="{{ parametro.meta_faturamento if parametro else '' }}" required>
-            </div>
-            <div class="col-md-4">
-                <label for="periodicidadeMeta" class="form-label">Periodicidade da Meta</label>
-                <select class="form-select" id="periodicidadeMeta" name="periodicidadeMeta" required>
-                    <option value="diaria" {{ 'selected' if parametro and parametro.periodicidade_meta == 'diaria' }}>Diária</option>
-                    <option value="semanal" {{ 'selected' if parametro and parametro.periodicidade_meta == 'semanal' }}>Semanal</option>
-                    <option value="mensal" {{ 'selected' if parametro and parametro.periodicidade_meta == 'mensal' }}>Mensal</option>
-                </select>
-            </div>
-            <div class="col-md-4">
-                <label for="tipoMeta" class="form-label">Tipo da Meta</label>
-                <select class="form-select" id="tipoMeta" name="tipoMeta" required>
-                    <option value="bruta" {{ 'selected' if parametro and parametro.tipo_meta == 'bruta' }}>Bruta</option>
-                    <option value="liquida" {{ 'selected' if parametro and parametro.tipo_meta == 'liquida' }}>Líquida</option>
-                </select>
-            </div>
+        <div class="mt-3">
+          <button type="submit" name="submit_parametros" value="salvar"
+                  class="btn btn-primary">
+            Salvar Parâmetros
+          </button>
         </div>
-        <div class="row mb-4">
-             <div class="col-md-4">
-                <label for="diasTrabalhoSemana" class="form-label">Dias de Trabalho por Semana</label>
-                <select class="form-select" id="diasTrabalhoSemana" name="diasTrabalhoSemana" required>
-                    {% for i in range(1, 8) %}
-                    <option value="{{ i }}" {{ 'selected' if parametro and parametro.dias_trabalho_semana == i else '' }}>{{ i }} dia(s)</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-4">
-                <label for="valorKmMinimo" class="form-label">Valor/KM Mínimo (R$)</label>
-                <input type="number" step="0.01" class="form-control" id="valorKmMinimo" name="valorKmMinimo" value="{{ parametro.valor_km_minimo if parametro else '' }}" required>
-            </div>
-            <div class="col-md-4">
-                <label for="valorKmMeta" class="form-label">Valor/KM Meta (R$)</label>
-                <input type="number" step="0.01" class="form-control" id="valorKmMeta" name="valorKmMeta" value="{{ parametro.valor_km_meta if parametro else '' }}" required>
-            </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Cadastro de Custos -->
+  <div class="card mb-4">
+    <div class="card-header">
+      <h3>Cadastrar Novo Custo Recorrente</h3>
+    </div>
+    <div class="card-body">
+      <form method="POST" action="{{ url_for('main.cadastro') }}">
+        {{ custo_form.hidden_tag() }}
+
+        <div class="row g-3">
+          <div class="col-md-6">
+            {{ custo_form.nome.label(class="form-label") }}
+            {{ custo_form.nome(class="form-control") }}
+          </div>
+
+          <div class="col-md-3">
+            {{ custo_form.valor.label(class="form-label") }}
+            {{ custo_form.valor(class="form-control") }}
+          </div>
+
+          <div class="col-md-3">
+            {{ custo_form.dia_vencimento.label(class="form-label") }}
+            {{ custo_form.dia_vencimento(class="form-control") }}
+          </div>
+
+          <div class="col-md-12">
+            {{ custo_form.observacao.label(class="form-label") }}
+            {{ custo_form.observacao(class="form-control") }}
+          </div>
         </div>
 
-        <hr class="my-4">
-
-        <h4>Custos Fixos Mensais</h4>
-        <div id="custosFixosContainer">
-            {% if parametro and parametro.custos_fixos %}
-                {% for custo in parametro.custos_fixos %}
-                <div class="input-group mb-3">
-                    <input type="text" class="form-control" name="custoNome" placeholder="Nome do Custo" value="{{ custo.nome }}" required>
-                    <span class="input-group-text">R$</span>
-                    <input type="number" step="0.01" class="form-control" name="custoValor" placeholder="Valor Mensal" value="{{ custo.valor }}" required>
-                    <button class="btn btn-outline-danger" type="button" onclick="this.parentElement.remove()">Remover</button>
-                </div>
-                {% endfor %}
-            {% endif %}
+        <div class="mt-3">
+          <button type="submit" name="submit" value="submit" class="btn btn-secondary">
+            Cadastrar Custo
+          </button>
         </div>
-        <button type="button" class="btn btn-outline-primary" id="addCustoFixoBtn">Adicionar Custo Fixo</button>
-        
-        <hr class="my-4">
+      </form>
+    </div>
+  </div>
 
-        <button type="submit" class="btn btn-primary w-100">Salvar Parâmetros e Custos</button>
-    </form>
+  <!-- Lista de Custos -->
+  <div class="card">
+    <div class="card-header">
+      <h3>Custos Recorrentes Cadastrados</h3>
+    </div>
+    <div class="card-body table-responsive">
+      <table class="table table-striped">
+        <thead>
+          <tr>
+            <th>Nome</th>
+            <th>Valor</th>
+            <th>Vencimento</th>
+            <th>Observação</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for custo in custos %}
+            <tr>
+              <td>{{ custo.nome }}</td>
+              <td>R$ {{ "%.2f"|format(custo.valor) }}</td>
+              <td>{{ custo.dia_vencimento }}</td>
+              <td>{{ custo.observacao }}</td>
+              <td>
+                <a href="{{ url_for('main.edit_definicao_custo', custo_id=custo.id) }}"
+                   class="btn btn-sm btn-outline-primary">✏️</a>
+                <form method="POST"
+                      action="{{ url_for('main.delete_definicao_custo', custo_id=custo.id) }}"
+                      style="display:inline"
+                      onsubmit="return confirm('Deseja excluir este custo?');">
+                  <button class="btn btn-sm btn-outline-danger">🗑️</button>
+                </form>
+              </td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="5" class="text-center">
+                Nenhum custo cadastrado.
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
 </div>
-{% endblock %}
-
-{% block scripts %}
-<script>
-    document.getElementById('addCustoFixoBtn').addEventListener('click', function() {
-        const container = document.getElementById('custosFixosContainer');
-        const newCustoDiv = document.createElement('div');
-        newCustoDiv.classList.add('input-group', 'mb-3');
-        newCustoDiv.innerHTML = `
-            <input type="text" class="form-control" name="custoNome" placeholder="Nome do Custo" required>
-            <span class="input-group-text">R$</span>
-            <input type="number" step="0.01" class="form-control" name="custoValor" placeholder="Valor Mensal" required>
-            <button class="btn btn-outline-danger" type="button" onclick="this.parentElement.remove()">Remover</button>
-        `;
-        container.appendChild(newCustoDiv);
-    });
-</script>
 {% endblock %}
