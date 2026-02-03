@@ -1,4 +1,4 @@
-from flask import render_template, flash, redirect, url_for, request, session, jsonify, abort
+from flask import render_template, flash, redirect, url_for, request, session, jsonify, abort, current_app
 from flask_login import login_user, logout_user, current_user, login_required
 from . import bp
 from app import db, oauth
