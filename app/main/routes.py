@@ -299,6 +299,16 @@ def _get_safe_day_for_cost(day):
     except (ValueError, TypeError):
         return 1
     
+def _to_float(value_str):
+    """Converte string para float, tratando vírgulas e valores vazios."""
+    if not value_str or not isinstance(value_str, str):
+        return 0.0
+    try:
+        return float(value_str.replace(',', '.'))
+    except (ValueError, TypeError):
+        return 0.0
+
+    
 
 @bp.route("/abastecimento", methods=['GET', 'POST'])
 @login_required
@@ -518,11 +528,13 @@ def categorias():
 def cadastro():
     parametro = current_user.parametros
     custo_form = CustoForm()
-    # Verifica se já existe algum abastecimento para decidir se os campos devem ser editáveis
     has_abastecimentos = Abastecimento.query.filter_by(user_id=current_user.id).first() is not None
 
     if request.method == 'POST':
-        if 'submit_parametros' in request.form:
+        # Verifica qual formulário foi enviado
+        form_name = request.form.get('form_name')
+
+        if form_name == 'parametros':
             if not parametro:
                 parametro = Parametros(user_id=current_user.id)
                 db.session.add(parametro)
@@ -530,17 +542,19 @@ def cadastro():
             parametro.modelo_carro = request.form.get('modelo_carro')
             parametro.placa_carro = request.form.get('placa_carro')
             
-            # Apenas atualiza KM e Consumo se for o cadastro inicial (sem abastecimentos)
+            # Apenas atualiza KM e Consumo se for o cadastro inicial
             if not has_abastecimentos:
                 km_str = request.form.get('km_atual')
-                consumo_str = request.form.get('media_consumo')
                 parametro.km_atual = int(km_str) if km_str and km_str.isdigit() else 0
-                parametro.media_consumo = float(consumo_str) if consumo_str and consumo_str.replace('.', '', 1).isdigit() else 0.0
+                parametro.media_consumo = _to_float(request.form.get('media_consumo'))
 
             dias_str = request.form.get('dias_trabalho_semana')
-            meta_str = request.form.get('meta_faturamento')
             parametro.dias_trabalho_semana = int(dias_str) if dias_str and dias_str.isdigit() else 0
-            parametro.meta_faturamento = float(meta_str) if meta_str and meta_str.replace('.', '', 1).isdigit() else 0.0
+            
+            # Usa a função auxiliar para todos os campos float
+            parametro.meta_faturamento = _to_float(request.form.get('meta_faturamento'))
+            parametro.valor_km_minimo = _to_float(request.form.get('valor_km_minimo'))
+            parametro.valor_km_meta = _to_float(request.form.get('valor_km_meta'))
             
             parametro.periodicidade_meta = request.form.get('periodicidade_meta')
             parametro.tipo_meta = request.form.get('tipo_meta')
@@ -554,7 +568,7 @@ def cadastro():
             
             return redirect(url_for('main.cadastro'))
 
-        elif 'submit' in request.form and custo_form.validate_on_submit():
+        elif form_name == 'custos' and custo_form.validate_on_submit():
             novo_custo = Custo(
                 nome=custo_form.nome.data,
                 valor=custo_form.valor.data,
