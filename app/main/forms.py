@@ -1,8 +1,7 @@
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, BooleanField, SubmitField, IntegerField, FloatField, DateField, TextAreaField, SelectField
+from wtforms import StringField, PasswordField, BooleanField, SubmitField, IntegerField, FloatField, DateField, TextAreaField, SelectField, HiddenField
 from wtforms.validators import DataRequired, Email, EqualTo, ValidationError, NumberRange, Optional
 from app.models import User
-
 
 class LoginForm(FlaskForm):
     email = StringField('E-mail', validators=[DataRequired(), Email()])
@@ -29,3 +28,8 @@ class CustoForm(FlaskForm):
     alerta_dias = IntegerField('Alerta (dias antes)', default=7, validators=[DataRequired(), NumberRange(min=0)])
     observacao = TextAreaField('Observações', validators=[Optional()])
     submit = SubmitField('Salvar Custo')
+
+class RegistroCustoForm(FlaskForm):
+    registro_id = HiddenField('Registro ID', validators=[DataRequired()])
+    pago = BooleanField('Pago')
+    submit = SubmitField('Atualizar')

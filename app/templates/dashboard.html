@@ -3,6 +3,18 @@ content %}
 <div class="container mt-4">
   <div class="d-flex justify-content-between align-items-center mb-4">
     <h1>Dashboard</h1>
+    <div>
+      <a
+        href="{{ url_for('main.dashboard', year=current_year if current_month > 1 else current_year - 1, month=current_month-1 if current_month > 1 else 12) }}"
+        class="btn btn-secondary"
+        >&lt; Mês Anterior</a
+      >
+      <a
+        href="{{ url_for('main.dashboard', year=current_year if current_month < 12 else current_year + 1, month=current_month+1 if current_month < 12 else 1) }}"
+        class="btn btn-secondary"
+        >Próximo Mês &gt;</a
+      >
+    </div>
   </div>
 
   {% if not parametro %}
@@ -14,20 +26,34 @@ content %}
     do seu veículo e suas metas.
   </div>
   {% else %}
+  <!-- CARDS DE RESUMO -->
   <div class="row">
-    <!-- Card Principal: Meta do Dia -->
+    <!-- Card Principal: Meta de Performance para Hoje -->
     <div class="col-lg-8 mb-4">
-      <div class="card text-center border-primary shadow-sm">
+      <div class="card text-center border-primary shadow-sm h-100">
         <div class="card-header bg-primary text-white">
           <h5 class="mb-0">Meta de Performance para Hoje</h5>
         </div>
-        <div class="card-body">
+        <div class="card-body d-flex flex-column justify-content-center">
+          {% if meta_hoje_atingida %}
+          <h2 class="card-title display-4 text-success">Meta Atingida!</h2>
+          <p class="card-text text-muted mb-0">
+            Você superou a meta de hoje em R$ {{
+            "%.2f"|format(meta_restante_hoje * -1) }}
+          </p>
+          {% else %}
           <h2 class="card-title display-4">
-            R$ {{ "%.2f"|format(meta_diaria_ajustada) }}
+            R$ {{ "%.2f"|format(meta_restante_hoje) }}
           </h2>
-          <p class="card-text text-muted">
-            Valor ajustado para hoje com base no seu progresso neste mês para
-            atingir sua meta.
+          <p class="card-text text-muted mb-0">
+            É o que falta para você atingir a meta ajustada de hoje (R$ {{
+            "%.2f"|format(meta_ajustada_para_hoje) }})
+          </p>
+          {% endif %}
+          <hr class="my-3" />
+          <p class="card-text mb-0">
+            Sua meta base diária é de
+            <strong>R$ {{ "%.2f"|format(meta_diaria_base) }}</strong>
           </p>
         </div>
       </div>
@@ -41,9 +67,12 @@ content %}
         </div>
         <div class="card-body d-flex flex-column justify-content-between">
           <div>
-            <h5 class="card-title">{{ parametro.modelo_carro }}</h5>
+            <h5 class="card-title">
+              {{ parametro.modelo_carro or 'Não informado' }}
+            </h5>
             <p class="card-text mb-1">
-              <strong>Placa:</strong> {{ parametro.placa_carro }}
+              <strong>Placa:</strong> {{ parametro.placa_carro or 'Não
+              informada' }}
             </p>
           </div>
           <a
@@ -56,22 +85,44 @@ content %}
     </div>
   </div>
 
-  <!-- Cards de Resumo 2x2 -->
   <div class="row">
-    <!-- Meta do Mês -->
+    <!-- Faturamento Bruto (Real) -->
     <div class="col-md-6 mb-4">
       <div class="card h-100">
         <div class="card-body text-center">
-          <h5 class="card-title">
-            Meta do Mês ({{ parametro.tipo_meta.capitalize() }})
-          </h5>
-          <p class="card-text display-6 fw-bold text-primary">
-            R$ {{ "%.2f"|format(meta_mensal_objetivo) }}
+          <h5 class="card-title">Faturamento Bruto (Mês)</h5>
+          <p class="card-text display-6 fw-bold">
+            R$ {{ "%.2f"|format(faturamento_bruto_real_mes) }}
           </p>
-          <small class="text-muted"
-            >Seu objetivo final para este mês, com base nos seus
-            parâmetros.</small
+          <small class="text-muted">Total real faturado no mês.</small>
+        </div>
+      </div>
+    </div>
+
+    <!-- Saldo Atual (Real) -->
+    <div class="col-md-6 mb-4">
+      <div class="card h-100">
+        <div class="card-body text-center">
+          <h5 class="card-title">Saldo Atual (Real)</h5>
+          <p
+            class="card-text display-6 fw-bold {% if saldo_atual_real >= 0 %}text-success{% else %}text-danger{% endif %}"
           >
+            R$ {{ "%.2f"|format(saldo_atual_real) }}
+          </p>
+          <small class="text-muted">(Faturamento Real - Todos os Custos)</small>
+        </div>
+      </div>
+    </div>
+
+    <!-- Meta do Mês (Bruta) -->
+    <div class="col-md-6 mb-4">
+      <div class="card h-100">
+        <div class="card-body text-center">
+          <h5 class="card-title">Meta do Mês (Bruta)</h5>
+          <p class="card-text display-6 fw-bold text-primary">
+            R$ {{ "%.2f"|format(meta_mensal_bruta) }}
+          </p>
+          <small class="text-muted">Seu objetivo de faturamento bruto.</small>
         </div>
       </div>
     </div>
@@ -80,103 +131,92 @@ content %}
     <div class="col-md-6 mb-4">
       <div class="card h-100">
         <div class="card-body text-center">
-          <h5 class="card-title">Projeção Lucro Operacional</h5>
-          <p class="card-text display-6 fw-bold text-success">
-            R$ {{ "%.2f"|format(previsao_lucro_operacional_mes) }}
+          <h5 class="card-title">Projeção Lucro</h5>
+          <p class="card-text display-6 fw-bold text-info">
+            R$ {{ "%.2f"|format(projecao_lucro_operacional) }}
           </p>
           <small class="text-muted"
-            >Estimativa do que sobrará (Faturamento - Custos Variáveis) para
-            pagar suas contas fixas e ter seu lucro.</small
-          >
-        </div>
-      </div>
-    </div>
-
-    <!-- Saldo Atual -->
-    <div class="col-md-6 mb-4">
-      <div class="card h-100">
-        <div class="card-body text-center">
-          <h5 class="card-title">Saldo Atual</h5>
-          <p
-            class="card-text display-6 fw-bold {% if saldo_mes >= 0 %}text-success{% else %}text-danger{% endif %}"
-          >
-            R$ {{ "%.2f"|format(saldo_mes) }}
-          </p>
-          <small class="text-muted"
-            >Sua diferença (positiva ou negativa) em relação à meta acumulada
-            até hoje.</small
-          >
-        </div>
-      </div>
-    </div>
-
-    <!-- Progresso Realizado -->
-    <div class="col-md-6 mb-4">
-      <div class="card h-100">
-        <div class="card-body text-center">
-          <h5 class="card-title">Faturamento Bruto</h5>
-          <p class="card-text display-6 fw-bold">
-            R$ {{ "%.2f"|format(faturamento_realizado_mes) }}
-          </p>
-          <small class="text-muted"
-            >Total faturado desde o início do mês.</small
+            >(Meta Bruta Mensal - Custos Variáveis)</small
           >
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Extrato Diário -->
-  <div class="accordion mt-2" id="extratoAccordion">
-    <div class="accordion-item">
-      <h2 class="accordion-header" id="headingOne">
-        <button
-          class="accordion-button collapsed"
-          type="button"
-          data-bs-toggle="collapse"
-          data-bs-target="#collapseOne"
-          aria-expanded="false"
-          aria-controls="collapseOne"
-        >
+  <!-- EXTRATO E CUSTOS FIXOS -->
+  <div class="row mt-2">
+    <!-- Extrato Detalhado do Mês -->
+    <div class="col-lg-8 mb-4">
+      <div class="card">
+        <div class="card-header">
           <strong>Extrato Detalhado do Mês</strong>
-        </button>
-      </h2>
-      <div
-        id="collapseOne"
-        class="accordion-collapse collapse"
-        aria-labelledby="headingOne"
-        data-bs-parent="#extratoAccordion"
-      >
-        <div class="accordion-body p-0">
+        </div>
+        <div class="card-body p-0" style="max-height: 400px; overflow-y: auto">
           <ul class="list-group list-group-flush">
             {% for dia in extrato_diario %}
+            <li class="list-group-item">
+              <div class="row align-items-center">
+                <div class="col-md-3">
+                  <strong>{{ dia.data.strftime('%d/%m') }}</strong>
+                  <span class="text-muted"
+                    >({{ dia.data.strftime('%a') }})</span
+                  >
+                </div>
+                <div class="col-md-4 text-center">
+                  <span
+                    class="fs-6 fw-bold {% if dia.faturamento_realizado >= dia.meta_esperada %}text-success{% else %}text-danger{% endif %}"
+                  >
+                    Realizado: R$ {{ "%.2f"|format(dia.faturamento_realizado) }}
+                  </span>
+                  <small class="d-block text-muted"
+                    >Meta: R$ {{ "%.2f"|format(dia.meta_esperada) }}</small
+                  >
+                </div>
+                <div class="col-md-5 text-end">
+                  <span class="badge bg-{{ dia.cor_km }} fs-6">
+                    Valor/KM: R$ {{ "%.2f"|format(dia.valor_km) }}
+                  </span>
+                </div>
+              </div>
+            </li>
+            {% else %}
+            <li class="list-group-item text-center text-muted">
+              Nenhum lançamento encontrado para este mês.
+            </li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Custos Fixos -->
+    <div class="col-lg-4 mb-4">
+      <div class="card">
+        <div class="card-header">
+          Custos Fixos do Mês (R$ {{ "%.2f"|format(custos_fixos_total) }})
+        </div>
+        <div class="card-body p-0" style="max-height: 400px; overflow-y: auto">
+          <ul class="list-group list-group-flush">
+            {% for registro in registros_custos %}
             <li
               class="list-group-item d-flex justify-content-between align-items-center"
             >
               <div>
-                <strong>{{ dia.data.strftime('%d/%m') }}</strong> ({{
-                dia.data.strftime('%a') }})
-                <small class="d-block text-muted">
-                  Meta do Dia: R$ {{ "%.2f"|format(dia.meta_esperada) }}
-                </small>
+                <span class="fw-bold">{{ registro.custo.nome }}</span>
+                <small class="d-block text-muted"
+                  >Vence: {{ registro.data_vencimento.strftime('%d/%m')
+                  }}</small
+                >
               </div>
-              <div class="text-end">
-                <span
-                  class="fs-6 fw-bold {% if dia.performance > 0 %}text-dark{% else %}text-muted{% endif %}"
-                >
-                  Realizado: R$ {{ "%.2f"|format(dia.performance) }}
-                </span>
-                <span
-                  class="d-block fs-6 fw-bold {% if dia.valor_km > parametro.valor_km_meta %}text-success {% elif dia.valor_km >= parametro.valor_km_minimo %}text-warning {% else %}text-danger{% endif %}"
-                >
-                  Valor/KM: R$ {{ "%.2f"|format(dia.valor_km) }}
-                </span>
-                <span
-                  class="d-block fs-6 fw-bold {% if dia.saldo >= 0 %}text-success{% else %}text-danger{% endif %}"
-                >
-                  Saldo do Dia: R$ {{ "%.2f"|format(dia.saldo) }}
-                </span>
-              </div>
+              <span
+                class="badge {% if registro.pago %}bg-success{% else %}bg-danger{% endif %} rounded-pill"
+              >
+                R$ {{ "%.2f"|format(registro.valor) }}
+              </span>
+            </li>
+            {% else %}
+            <li class="list-group-item text-center text-muted">
+              Nenhum custo fixo para este mês.
             </li>
             {% endfor %}
           </ul>

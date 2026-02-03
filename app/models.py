@@ -44,6 +44,8 @@ class Parametros(db.Model):
     dias_trabalho_semana = db.Column(db.Integer)
     valor_km_minimo = db.Column(db.Float, default=0.0)
     valor_km_meta = db.Column(db.Float, default=0.0)
+    # Relação com LancamentoDiario
+    lancamentos_diarios = db.relationship('LancamentoDiario', backref='parametro', lazy='dynamic', cascade="all, delete-orphan")
 
 class CategoriaCusto(db.Model):
     __tablename__ = 'categoria_custo'
@@ -55,6 +57,7 @@ class LancamentoDiario(db.Model):
     __tablename__ = 'lancamento_diario'
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    parametro_id = db.Column(db.Integer, db.ForeignKey('parametros.id'), nullable=False)
     data = db.Column(db.Date, nullable=False, index=True)
     km_rodado = db.Column(db.Integer, default=0)
     faturamentos = db.relationship('Faturamento', backref='lancamento', lazy='dynamic', cascade="all, delete-orphan")
@@ -98,6 +101,7 @@ class Abastecimento(db.Model):
     __tablename__ = 'abastecimento'
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    parametro_id = db.Column(db.Integer, db.ForeignKey('parametros.id'), nullable=False)
     data = db.Column(db.Date, nullable=False, index=True)
     km_atual = db.Column(db.Integer, nullable=False)
     litros = db.Column(db.Float, nullable=False)
