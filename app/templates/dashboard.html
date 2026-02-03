@@ -1,8 +1,14 @@
 {% extends "base.html" %} {% block title %}Dashboard{% endblock %} {% block
-content %}
+content %} {% set months = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio',
+'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'] %}
 <div class="container mt-4">
   <div class="d-flex justify-content-between align-items-center mb-4">
-    <h1>Dashboard</h1>
+    <h1>
+      Dashboard
+      <span class="text-primary fw-normal fs-3"
+        >{{ months[current_month - 1] }} de {{ current_year }}</span
+      >
+    </h1>
     <div>
       <a
         href="{{ url_for('main.dashboard', year=current_year if current_month > 1 else current_year - 1, month=current_month-1 if current_month > 1 else 12) }}"
@@ -197,7 +203,8 @@ content %}
         </div>
         <div class="card-body p-0" style="max-height: 400px; overflow-y: auto">
           <ul class="list-group list-group-flush">
-            {% for registro in registros_custos %}
+            {% for registro in registros_custos %} {% if
+            registro.custo.is_active %}
             <li
               class="list-group-item d-flex justify-content-between align-items-center"
             >
@@ -208,15 +215,42 @@ content %}
                   }}</small
                 >
               </div>
-              <span
-                class="badge {% if registro.pago %}bg-success{% else %}bg-danger{% endif %} rounded-pill"
-              >
-                R$ {{ "%.2f"|format(registro.valor) }}
-              </span>
+              <div class="text-end">
+                <span
+                  class="badge {% if registro.pago %}bg-success{% else %}bg-danger{% endif %} rounded-pill mb-1"
+                >
+                  R$ {{ "%.2f"|format(registro.valor) }}
+                </span>
+
+                <!-- BOTÃO DE PAGAMENTO -->
+                <form
+                  method="POST"
+                  action="{{ url_for('main.toggle_pago', registro_id=registro.id) }}"
+                  style="display: inline"
+                >
+                  {% if registro.pago %}
+                  <button
+                    type="submit"
+                    class="btn btn-sm btn-outline-warning"
+                    title="Marcar como Pendente"
+                  >
+                    Desfazer
+                  </button>
+                  {% else %}
+                  <button
+                    type="submit"
+                    class="btn btn-sm btn-success"
+                    title="Marcar como Pago"
+                  >
+                    Pagar
+                  </button>
+                  {% endif %}
+                </form>
+              </div>
             </li>
-            {% else %}
+            {% endif %} {% else %}
             <li class="list-group-item text-center text-muted">
-              Nenhum custo fixo para este mês.
+              Nenhum custo fixo gerado para este mês.
             </li>
             {% endfor %}
           </ul>

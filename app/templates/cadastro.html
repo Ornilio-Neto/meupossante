@@ -98,43 +98,43 @@
             </select>
           </div>
 
-          <!-- Tipo da Meta -->
-          <div class="col-md-6">
-            <label class="form-label">Tipo da Meta</label>
-            <select class="form-select" name="tipo_meta">
-              <option value="bruta" {{ 'selected' if tipo_meta == 'bruta' else '' }}>
-                Bruta (Faturamento Total)
-              </option>
-              <option value="liquida" {{ 'selected' if tipo_meta == 'liquida' else '' }}>
-                Líquida (Faturamento - Custos Variáveis)
-              </option>
-            </select>
-          </div>
-          
-          <hr class="my-4">
+         <!-- Tipo da Meta -->
+         <div class="col-md-6">
+           <label class="form-label">Tipo da Meta</label>
+           <select class="form-select" name="tipo_meta">
+             <option value="bruta" {{ 'selected' if tipo_meta == 'bruta' else '' }}>
+               Bruta (Faturamento Total)
+             </option>
+             <option value="liquida" {{ 'selected' if tipo_meta == 'liquida' else '' }}>
+               Líquida (Faturamento - Custos Variáveis)
+             </option>
+           </select>
+         </div>
+         
+         <hr class="my-4">
 
-          <div class="col-md-6">
-              <label class="form-label">Valor Mínimo por KM (R$)</label>
-              <input type="text" inputmode="decimal" class="form-control" name="valor_km_minimo"
-                     value="{{ '%.2f'|format(p.valor_km_minimo) if p else '' }}">
-              <small class="form-text text-muted">
-                  Valor mínimo que você aceita ganhar por KM rodado. Ajuda a filtrar corridas.
-              </small>
-          </div>
+         <div class="col-md-6">
+             <label class="form-label">Valor Mínimo por KM (R$)</label>
+             <input type="text" inputmode="decimal" class="form-control" name="valor_km_minimo"
+                    value="{{ '%.2f'|format(p.valor_km_minimo) if p else '' }}">
+             <small class="form-text text-muted">
+                 Valor mínimo que você aceita ganhar por KM rodado. Ajuda a filtrar corridas.
+             </small>
+         </div>
 
-          <div class="col-md-6">
-              <label class="form-label">Meta de Valor por KM (R$)</label>
-              <input type="text" inputmode="decimal" class="form-control" name="valor_km_meta"
-                     value="{{ '%.2f'|format(p.valor_km_meta) if p else '' }}">
-              <small class="form-text text-muted">
-                  Sua meta de ganho por KM rodado para atingir seus objetivos.
-              </small>
-          </div>
+         <div class="col-md-6">
+             <label class="form-label">Meta de Valor por KM (R$)</label>
+             <input type="text" inputmode="decimal" class="form-control" name="valor_km_meta"
+                    value="{{ '%.2f'|format(p.valor_km_meta) if p else '' }}">
+             <small class="form-text text-muted">
+                 Sua meta de ganho por KM rodado para atingir seus objetivos.
+             </small>
+         </div>
 
         </div>
 
         <div class="mt-4">
-          <button type="submit" name="submit_parametros" value="salvar"
+          <button type="submit" name="form_name" value="parametros"
                   class="btn btn-primary">
             Salvar Parâmetros
           </button>
@@ -161,12 +161,12 @@
 
           <div class="col-md-3">
             {{ custo_form.valor.label(class="form-label") }}
-            {{ custo_form.valor(class="form-control") }}
+            {{ custo_form.valor(class="form-control", placeholder="Ex: 150,50") }}
           </div>
 
           <div class="col-md-3">
             {{ custo_form.dia_vencimento.label(class="form-label") }}
-            {{ custo_form.dia_vencimento(class="form-control") }}
+            {{ custo_form.dia_vencimento(class="form-control", min=1, max=31) }}
           </div>
 
           <div class="col-md-12">
@@ -176,7 +176,7 @@
         </div>
 
         <div class="mt-3">
-          <button type="submit" name="submit" value="submit" class="btn btn-secondary">
+          <button type="submit" class="btn btn-secondary">
             Cadastrar Custo
           </button>
         </div>
@@ -190,37 +190,55 @@
       <h3>Custos Recorrentes Cadastrados</h3>
     </div>
     <div class="card-body table-responsive">
-      <table class="table table-striped">
+      <table class="table table-striped table-hover align-middle">
         <thead>
           <tr>
             <th>Nome</th>
             <th>Valor</th>
             <th>Vencimento</th>
+            <th class="text-center">Status</th>
             <th>Observação</th>
-            <th>Ações</th>
+            <th class="text-center">Ações</th>
           </tr>
         </thead>
         <tbody>
           {% for custo in custos %}
-            <tr>
-              <td>{{ custo.nome }}</td>
+            {# Deixa a linha cinza se o custo estiver inativo #}
+            <tr class="{% if not custo.is_active %}text-muted{% endif %}">
+              <td class="fw-bold">{{ custo.nome }}</td>
               <td>R$ {{ "%.2f"|format(custo.valor) }}</td>
               <td>Dia {{ custo.dia_vencimento }}</td>
+              <td class="text-center">
+                {# Badge para indicar o status #}
+                {% if custo.is_active %}
+                  <span class="badge bg-success">Ativo</span>
+                {% else %}
+                  <span class="badge bg-secondary">Inativo</span>
+                {% endif %}
+              </td>
               <td>{{ custo.observacao }}</td>
-              <td>
-                <a href="{{ url_for('main.edit_definicao_custo', custo_id=custo.id) }}"
-                   class="btn btn-sm btn-outline-primary">✏️</a>
-                <form method="POST"
-                      action="{{ url_for('main.delete_definicao_custo', custo_id=custo.id) }}"
-                      style="display:inline"
-                      onsubmit="return confirm('Deseja excluir este custo?');">
-                  <button type="submit" class="btn btn-sm btn-outline-danger">🗑️</button>
+              <td class="text-center text-nowrap">
+                <!-- BOTÃO DE ATIVAR/DESATIVAR -->
+                <form method="POST" action="{{ url_for('main.toggle_custo_active', custo_id=custo.id) }}" style="display:inline">
+                  {% if custo.is_active %}
+                    <button type="submit" class="btn btn-sm btn-outline-warning" title="Desativar Custo">⏸️</button>
+                  {% else %}
+                    <button type="submit" class="btn btn-sm btn-outline-success" title="Ativar Custo">▶️</button>
+                  {% endif %}
+                </form>
+                
+                <!-- Botão de Editar (já existente) -->
+                <a href="{{ url_for('main.edit_definicao_custo', custo_id=custo.id) }}" class="btn btn-sm btn-outline-primary" title="Editar Custo">✏️</a>
+                
+                <!-- Botão de Excluir (já existente, com alerta melhorado) -->
+                <form method="POST" action="{{ url_for('main.delete_definicao_custo', custo_id=custo.id) }}" style="display:inline" onsubmit="return confirm('ATENÇÃO! Deseja excluir permanentemente este custo e TODOS os seus registros passados e futuros? Esta ação não pode ser desfeita.');">
+                  <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir Custo">🗑️</button>
                 </form>
               </td>
             </tr>
           {% else %}
             <tr>
-              <td colspan="5" class="text-center">
+              <td colspan="6" class="text-center">
                 Nenhum custo cadastrado.
               </td>
             </tr>

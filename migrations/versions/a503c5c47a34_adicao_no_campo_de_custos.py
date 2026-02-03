@@ -1,8 +1,8 @@
-"""correcao no bd
+"""adicao no campo de custos
 
-Revision ID: b19667a67c50
+Revision ID: a503c5c47a34
 Revises: 
-Create Date: 2026-02-03 09:46:26.562689
+Create Date: 2026-02-03 10:13:58.168695
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = 'b19667a67c50'
+revision = 'a503c5c47a34'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -50,6 +50,7 @@ def upgrade():
     sa.Column('dia_vencimento', sa.Integer(), nullable=False),
     sa.Column('observacao', sa.Text(), nullable=True),
     sa.Column('alerta_dias', sa.Integer(), nullable=True),
+    sa.Column('is_active', sa.Boolean(), nullable=False),
     sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
     sa.PrimaryKeyConstraint('id')
     )

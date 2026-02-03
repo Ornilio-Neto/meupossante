@@ -120,6 +120,7 @@ class Custo(db.Model):
     dia_vencimento = db.Column(db.Integer, nullable=False)
     observacao = db.Column(db.Text, nullable=True)
     alerta_dias = db.Column(db.Integer, default=7)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)  # <-- CAMPO ADICIONADO
     registros = db.relationship('RegistroCusto', backref='custo', lazy='dynamic', cascade="all, delete-orphan")
 
 class RegistroCusto(db.Model):
