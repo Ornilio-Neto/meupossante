@@ -141,7 +141,26 @@ def index():
                 ))
             flash(f'Dados de desempenho salvos com sucesso!', 'success')
 
-        elif form_type == 'custo':
+        elif form_type in ['custo', 'avulso']:
+            if form_type == 'avulso':
+                valores_fat = request.form.getlist('faturamentoValor')
+                tipos_fat = request.form.getlist('faturamentoTipo')
+                fontes_fat = request.form.getlist('faturamentoFonte')
+                fontes_outro_fat = request.form.getlist('faturamentoFonteOutro')
+                for i in range(len(valores_fat)):
+                    valor_str = valores_fat[i].strip()
+                    if not valor_str or float(valor_str) <= 0: continue
+                    fonte_final = 'N/A'
+                    if tipos_fat[i] == 'App':
+                        fonte_selecionada = fontes_fat.pop(0) if fontes_fat else ''
+                        if fonte_selecionada == 'Outro': fonte_final = fontes_outro_fat.pop(0).strip() or 'Outro'
+                        else: fonte_final = fonte_selecionada
+                    else: fonte_final = 'Dinheiro'
+                    db.session.add(Faturamento(
+                        valor=float(valor_str), tipo=tipos_fat[i], fonte=fonte_final,
+                        data=data_obj, user_id=current_user.id, lancamento_id=lancamento_diario.id
+                    ))
+
             # CORREÇÃO: Implementa a lógica para salvar custos variáveis
             custo_descricoes = request.form.getlist('custoDescricao')
             custo_categorias = request.form.getlist('custoCategoria')
@@ -183,7 +202,10 @@ def index():
                     )
                     db.session.add(novo_custo_variavel)
 
-            flash(f'Custos variáveis salvos com sucesso!', 'success')
+            if form_type == 'avulso':
+                flash(f'Lançamentos avulsos salvos com sucesso!', 'success')
+            else:
+                flash(f'Custos variáveis salvos com sucesso!', 'success')
 
         db.session.commit()
         return redirect(url_for('main.index'))
@@ -728,3 +750,157 @@ def get_parametros_for_date(user, target_date):
     ).order_by(Parametros.start_date.desc()).first()
     
     return parametros
+
+
+@bp.route('/relatorios', methods=['GET'])
+@login_required
+def relatorios():
+    import json
+    from datetime import date, timedelta
+    
+    periodo = request.args.get('periodo', 'mes_atual')
+    hoje = date.today()
+    
+    if periodo == 'mes_atual':
+        start_date = date(hoje.year, hoje.month, 1)
+        _, last_day = calendar.monthrange(hoje.year, hoje.month)
+        end_date = date(hoje.year, hoje.month, last_day)
+    elif periodo == 'mes_anterior':
+        first_day_this_month = date(hoje.year, hoje.month, 1)
+        last_day_prev_month = first_day_this_month - timedelta(days=1)
+        start_date = date(last_day_prev_month.year, last_day_prev_month.month, 1)
+        end_date = last_day_prev_month
+    elif periodo == 'semana_atual':
+        start_date = hoje - timedelta(days=hoje.weekday()) # Monday
+        end_date = start_date + timedelta(days=6) # Sunday
+    elif periodo == 'personalizado':
+        sd_str = request.args.get('start_date')
+        ed_str = request.args.get('end_date')
+        try:
+            start_date = datetime.strptime(sd_str, '%Y-%m-%d').date()
+            end_date = datetime.strptime(ed_str, '%Y-%m-%d').date()
+        except:
+            start_date = date(hoje.year, hoje.month, 1)
+            end_date = hoje
+    else:
+        start_date = date(hoje.year, hoje.month, 1)
+        end_date = hoje
+        
+    parametro = get_parametros_for_date(current_user, min(end_date, hoje))
+
+    # --- SQL Queries ---
+    faturamentos = Faturamento.query.filter(
+        Faturamento.user_id == current_user.id,
+        Faturamento.data.between(start_date, end_date)
+    ).all()
+    faturamento_total = sum(f.valor for f in faturamentos)
+    
+    abastecimentos = Abastecimento.query.filter(
+        Abastecimento.user_id == current_user.id,
+        Abastecimento.data.between(start_date, end_date)
+    ).all()
+    abastecimento_total = sum(a.valor_total for a in abastecimentos)
+    
+    custos_var = CustoVariavel.query.filter(
+        CustoVariavel.user_id == current_user.id,
+        CustoVariavel.data.between(start_date, end_date)
+    ).all()
+    custo_var_total = sum(c.valor for c in custos_var)
+    
+    registros_custos = RegistroCusto.query.join(Custo).filter(
+        RegistroCusto.user_id == current_user.id,
+        Custo.is_active == True,
+        RegistroCusto.data_vencimento.between(start_date, end_date)
+    ).all()
+    custo_fixo_total = sum(rc.valor for rc in registros_custos if rc.pago)
+    
+    custo_total = abastecimento_total + custo_var_total + custo_fixo_total
+    lucro_liquido = faturamento_total - custo_total
+    
+    delta_days = (end_date - start_date).days
+    
+    labels = []
+    faturamento_diario = []
+    custos_diarios = []
+    lucro_diario = []
+    
+    if delta_days <= 60:
+        for i in range(delta_days + 1):
+            dia_atual = start_date + timedelta(days=i)
+            labels.append(dia_atual.strftime('%d/%m'))
+            
+            fat_dia = sum(f.valor for f in faturamentos if f.data == dia_atual)
+            abast_dia = sum(a.valor_total for a in abastecimentos if a.data == dia_atual)
+            cv_dia = sum(c.valor for c in custos_var if c.data == dia_atual)
+            cf_dia = sum(rc.valor for rc in registros_custos if rc.data_vencimento == dia_atual and rc.pago)
+            
+            custo_dia = abast_dia + cv_dia + cf_dia
+            
+            faturamento_diario.append(round(fat_dia, 2))
+            custos_diarios.append(round(custo_dia, 2))
+            lucro_diario.append(round(fat_dia - custo_dia, 2))
+    else:
+        dict_agrupado = {}
+        for d in range(delta_days + 1):
+            dia_atual = start_date + timedelta(days=d)
+            k = dia_atual.strftime('%m/%Y')
+            if k not in dict_agrupado:
+                dict_agrupado[k] = {'fat': 0, 'custo': 0}
+        
+        for f in faturamentos: 
+            k = f.data.strftime('%m/%Y')
+            if k in dict_agrupado: dict_agrupado[k]['fat'] += f.valor
+        for a in abastecimentos: 
+            k = a.data.strftime('%m/%Y')
+            if k in dict_agrupado: dict_agrupado[k]['custo'] += a.valor_total
+        for c in custos_var: 
+            k = c.data.strftime('%m/%Y')
+            if k in dict_agrupado: dict_agrupado[k]['custo'] += c.valor
+        for rc in registros_custos: 
+            if rc.pago: 
+                k = rc.data_vencimento.strftime('%m/%Y')
+                if k in dict_agrupado: dict_agrupado[k]['custo'] += rc.valor
+            
+        for k, vals in dict_agrupado.items():
+            labels.append(k)
+            faturamento_diario.append(round(vals['fat'], 2))
+            custos_diarios.append(round(vals['custo'], 2))
+            lucro_diario.append(round(vals['fat'] - vals['custo'], 2))
+            
+    meta_esperada = 0
+    if parametro and parametro.meta_faturamento:
+        if parametro.periodicidade_meta == 'diaria':
+            dias_uteis = min(delta_days + 1, parametro.dias_trabalho_semana * 4) # fallback aproximado
+            meta_esperada = parametro.meta_faturamento * dias_uteis
+        elif parametro.periodicidade_meta == 'semanal':
+            semanas = (delta_days + 1) / 7.0
+            meta_esperada = parametro.meta_faturamento * semanas
+        else:
+            meses = (delta_days + 1) / 30.0
+            meta_esperada = parametro.meta_faturamento * meses
+
+    meta_atingida_perc = 0
+    if meta_esperada > 0:
+        if parametro.tipo_meta == 'liquida':
+            meta_atingida_perc = (lucro_liquido / meta_esperada) * 100
+        else:
+            meta_atingida_perc = (faturamento_total / meta_esperada) * 100
+            
+    return render_template(
+        'relatorios.html', 
+        periodo=periodo,
+        start_date=start_date.strftime('%Y-%m-%d'),
+        end_date=end_date.strftime('%Y-%m-%d'),
+        faturamento_total=faturamento_total,
+        abastecimento_total=abastecimento_total,
+        custo_var_total=custo_var_total,
+        custo_fixo_total=custo_fixo_total,
+        custo_total=custo_total,
+        lucro_liquido=lucro_liquido,
+        meta_esperada=meta_esperada,
+        meta_atingida_perc=meta_atingida_perc,
+        labels=json.dumps(labels),
+        faturamento_diario=json.dumps(faturamento_diario),
+        custos_diarios=json.dumps(custos_diarios),
+        lucro_diario=json.dumps(lucro_diario)
+    )

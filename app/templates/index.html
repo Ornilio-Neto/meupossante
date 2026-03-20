@@ -26,7 +26,7 @@
                 <button class="nav-link active" id="desempenho-tab" data-bs-toggle="tab" data-bs-target="#desempenho" type="button" role="tab" aria-controls="desempenho" aria-selected="true">Desempenho do Dia</button>
             </li>
             <li class="nav-item" role="presentation">
-                <button class="nav-link" id="custos-tab" data-bs-toggle="tab" data-bs-target="#custos" type="button" role="tab" aria-controls="custos" aria-selected="false">Lançar Custos Avulsos</button>
+                <button class="nav-link" id="avulsos-tab" data-bs-toggle="tab" data-bs-target="#avulsos" type="button" role="tab" aria-controls="avulsos" aria-selected="false">Lançamentos Avulsos</button>
             </li>
         </ul>
 
@@ -92,19 +92,57 @@
                 </div>
             </div>
 
-            <!-- Aba 2: Custos -->
-            <div class="tab-pane fade" id="custos" role="tabpanel" aria-labelledby="custos-tab">
+            <!-- Aba 2: Avulsos -->
+            <div class="tab-pane fade" id="avulsos" role="tabpanel" aria-labelledby="avulsos-tab">
                  <div class="card card-body bg-light border-top-0 rounded-bottom">
-                    <h5 class="card-title mt-2">Adicione Custos Variáveis</h5>
-                    <p class="card-text">Lance despesas como alimentação, pedágios, etc.</p>
+                    <h5 class="card-title mt-2">Lançamentos Avulsos</h5>
+                    <p class="card-text">Lance receitas e custos avulsos independentes do desempenho de KM.</p>
                     <form method="POST">
-                        <input type="hidden" name="form_type" value="custo">
+                        <input type="hidden" name="form_type" value="avulso">
                         <div class="row mb-3">
                              <div class="col-md-4">
-                                <label for="data_custo" class="form-label">Data do Custo</label>
-                                <input type="date" class="form-control" id="data_custo" name="data" value="{{ hoje }}" required>
+                                <label for="data_avulso" class="form-label">Data do Lançamento</label>
+                                <input type="date" class="form-control" id="data_avulso" name="data" value="{{ hoje }}" required>
                             </div>
                         </div>
+
+                        <!-- Receitas Avulsas -->
+                        <h6 class="mb-3 mt-4 text-success">Receitas Avulsas</h6>
+                        <div id="faturamento-avulso-container">
+                            <div class="row g-3 align-items-end mb-3 faturamento-avulso-row">
+                                <div class="col-md-3">
+                                    <label class="form-label">Valor (R$)</label>
+                                    <input type="number" step="0.01" class="form-control" name="faturamentoValor">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Pagamento</label>
+                                    <select class="form-select" name="faturamentoTipo">
+                                        <option value="App" selected>App</option>
+                                        <option value="Especie">Espécie</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-5">
+                                    <div class="faturamento-avulso-source-wrapper">
+                                        <label class="form-label">Fonte</label>
+                                        <select class="form-select" name="faturamentoFonte">
+                                            <option value="Uber" selected>Uber</option>
+                                            <option value="99">99</option>
+                                            <option value="Outro">Outro</option>
+                                        </select>
+                                        <input type="text" class="form-control mt-2" name="faturamentoFonteOutro" placeholder="Especifique a fonte" style="display: none;">
+                                    </div>
+                                </div>
+                                <div class="col-md-1 d-flex align-items-end">
+                                    <button type="button" class="btn btn-danger btn-sm w-100 remove-faturamento-avulso" disabled>X</button>
+                                </div>
+                            </div>
+                        </div>
+                        <button type="button" id="add-faturamento-avulso-btn" class="btn btn-success btn-sm mt-2">+ Adicionar Nova Receita</button>
+                        
+                        <hr class="my-4">
+
+                        <!-- Custos Variáveis -->
+                        <h6 class="mb-3 text-danger">Custos Avulsos</h6>
                         
                         <div id="custos-container">
                             <div class="row g-3 align-items-end mb-3 custo-row">
@@ -140,7 +178,7 @@
                         </div>
 
                         <div class="d-grid gap-2 mt-4">
-                            <button type="submit" class="btn btn-primary">Salvar Custos</button>
+                            <button type="submit" class="btn btn-primary">Salvar Lançamentos Avulsos</button>
                         </div>
                     </form>
                 </div>
@@ -224,6 +262,42 @@ document.addEventListener('DOMContentLoaded', function() {
 
     document.querySelectorAll('#faturamento-container .faturamento-row').forEach(setupFaturamentoRow);
     updateFaturamentoRemoveButtons();
+
+    // --- LÓGICA PARA FATURAMENTO AVULSO ---
+    function setupFaturamentoAvulsoRow(row) {
+        const fonteSelect = row.querySelector('select[name="faturamentoFonte"]');
+        const outroInput = row.querySelector('input[name="faturamentoFonteOutro"]');
+
+        fonteSelect.addEventListener('change', () => {
+            outroInput.style.display = fonteSelect.value === 'Outro' ? 'block' : 'none';
+            outroInput.required = fonteSelect.value === 'Outro';
+        });
+        
+        outroInput.style.display = fonteSelect.value === 'Outro' ? 'block' : 'none';
+        outroInput.required = fonteSelect.value === 'Outro';
+    }
+
+    function updateFaturamentoAvulsoRemoveButtons() {
+        const rows = document.querySelectorAll('#faturamento-avulso-container .faturamento-avulso-row');
+        rows.forEach(row => {
+            const removeBtn = row.querySelector('.remove-faturamento-avulso');
+            removeBtn.disabled = rows.length === 1;
+            removeBtn.onclick = () => { row.remove(); updateFaturamentoAvulsoRemoveButtons(); };
+        });
+    }
+
+    document.getElementById('add-faturamento-avulso-btn').addEventListener('click', () => {
+        const container = document.getElementById('faturamento-avulso-container');
+        const newRow = container.querySelector('.faturamento-avulso-row').cloneNode(true);
+        newRow.querySelectorAll('input').forEach(input => input.value = '');
+        newRow.querySelectorAll('select').forEach(select => select.selectedIndex = 0);
+        container.appendChild(newRow);
+        setupFaturamentoAvulsoRow(newRow);
+        updateFaturamentoAvulsoRemoveButtons();
+    });
+
+    document.querySelectorAll('#faturamento-avulso-container .faturamento-avulso-row').forEach(setupFaturamentoAvulsoRow);
+    updateFaturamentoAvulsoRemoveButtons();
 });
 </script>
 {% endblock %}

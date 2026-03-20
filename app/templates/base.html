@@ -49,6 +49,11 @@
               <a class="nav-link" href="{{ url_for('main.custos') }}">Custos</a>
             </li>
             <li class="nav-item">
+              <a class="nav-link" href="{{ url_for('main.relatorios') }}"
+                >Relatórios</a
+              >
+            </li>
+            <li class="nav-item">
               <a class="nav-link" href="{{ url_for('main.dashboard') }}"
                 >Dashboard</a
               >
@@ -65,21 +70,25 @@
             </li>
             <li class="nav-item dropdown">
               <a
-                class="nav-link dropdown-toggle"
+                class="nav-link dropdown-toggle d-flex align-items-center"
                 href="#"
                 id="navbarDropdown"
                 role="button"
                 data-bs-toggle="dropdown"
                 aria-expanded="false"
               >
+                {% if current_user.profile_pic %}
                 <img
                   src="{{ current_user.profile_pic }}"
                   alt="Foto de Perfil"
-                  class="rounded-circle"
+                  class="rounded-circle me-1"
                   width="30"
                   height="30"
                 />
-                {{ current_user.name.split()[0] }}
+                {% else %}
+                <i class="bi bi-person-circle fs-4 me-1"></i>
+                {% endif %}
+                {{ current_user.name.split()[0] if current_user.name else current_user.email.split('@')[0] }}
               </a>
               <ul
                 class="dropdown-menu dropdown-menu-end"

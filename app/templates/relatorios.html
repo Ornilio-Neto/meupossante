@@ -1,0 +1,300 @@
+{% extends "base.html" %}
+
+{% block title %}Relatórios Avançados{% endblock %}
+
+{% block styles %}
+<style>
+    .kpi-card {
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        border: none;
+        transition: transform 0.2s;
+    }
+    .kpi-card:hover {
+        transform: translateY(-5px);
+    }
+    .kpi-icon {
+        font-size: 2.5rem;
+        opacity: 0.8;
+    }
+    .kpi-value {
+        font-size: 1.8rem;
+        font-weight: bold;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4 mb-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Central de Relatórios</h1>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card mb-4 shadow-sm">
+        <div class="card-body">
+            <form method="GET" action="{{ url_for('main.relatorios') }}" class="row g-3 align-items-end" id="filterForm">
+                <div class="col-md-3">
+                    <label class="form-label fw-bold">Período Rápido</label>
+                    <select name="periodo" class="form-select" id="periodoSelect">
+                        <option value="mes_atual" {% if periodo == 'mes_atual' %}selected{% endif %}>Mês Atual</option>
+                        <option value="mes_anterior" {% if periodo == 'mes_anterior' %}selected{% endif %}>Mês Anterior</option>
+                        <option value="semana_atual" {% if periodo == 'semana_atual' %}selected{% endif %}>Semana Atual</option>
+                        <option value="personalizado" {% if periodo == 'personalizado' %}selected{% endif %}>Personalizado</option>
+                    </select>
+                </div>
+                <div class="col-md-3 custom-date" style="display: none;">
+                    <label class="form-label fw-bold">Data Inicial</label>
+                    <input type="date" name="start_date" class="form-control" value="{{ start_date }}">
+                </div>
+                <div class="col-md-3 custom-date" style="display: none;">
+                    <label class="form-label fw-bold">Data Final</label>
+                    <input type="date" name="end_date" class="form-control" value="{{ end_date }}">
+                </div>
+                <div class="col-md-3">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-filter"></i> Aplicar Filtros
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="row g-4 mb-5">
+        <!-- Faturamento -->
+        <div class="col-md-3">
+            <div class="card kpi-card bg-primary text-white h-100">
+                <div class="card-body d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title text-uppercase fw-bold mb-1">Faturamento Total</h6>
+                        <div class="kpi-value">R$ {{ "%.2f"|format(faturamento_total) }}</div>
+                    </div>
+                    <i class="bi bi-currency-dollar kpi-icon"></i>
+                </div>
+            </div>
+        </div>
+        <!-- Custos -->
+        <div class="col-md-3">
+            <div class="card kpi-card bg-danger text-white h-100">
+                <div class="card-body d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title text-uppercase fw-bold mb-1">Custos Totais</h6>
+                        <div class="kpi-value">R$ {{ "%.2f"|format(custo_total) }}</div>
+                    </div>
+                    <i class="bi bi-graph-down-arrow kpi-icon"></i>
+                </div>
+            </div>
+        </div>
+        <!-- Lucro -->
+        <div class="col-md-3">
+            <div class="card kpi-card {% if lucro_liquido >= 0 %}bg-success{% else %}bg-warning text-dark{% endif %} text-white h-100">
+                <div class="card-body d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title text-uppercase fw-bold mb-1">Lucro Líquido</h6>
+                        <div class="kpi-value">R$ {{ "%.2f"|format(lucro_liquido) }}</div>
+                    </div>
+                    <i class="bi bi-cash-stack kpi-icon"></i>
+                </div>
+            </div>
+        </div>
+        <!-- Meta -->
+        <div class="col-md-3">
+            <div class="card kpi-card bg-info text-white h-100">
+                <div class="card-body d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title text-uppercase fw-bold mb-1">Progresso Meta</h6>
+                        <div class="kpi-value">{{ "%.1f"|format(meta_atingida_perc) }}%</div>
+                        <small>Esperado: R$ {{ "%.2f"|format(meta_esperada) }}</small>
+                    </div>
+                    <i class="bi bi-bullseye kpi-icon"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gráficos -->
+    <div class="row g-4">
+        <!-- Evolução -->
+        <div class="col-md-8">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-white fw-bold">
+                    <i class="bi bi-bar-chart-line me-2 text-primary"></i> Evolução no Período
+                </div>
+                <div class="card-body">
+                    <canvas id="evolucaoChart" style="min-height: 300px;"></canvas>
+                </div>
+            </div>
+        </div>
+        <!-- Composição de Custos -->
+        <div class="col-md-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-white fw-bold">
+                    <i class="bi bi-pie-chart me-2 text-primary"></i> Composição de Custos
+                </div>
+                <div class="card-body d-flex justify-content-center align-items-center">
+                    <canvas id="custosChart" style="max-height: 250px;"></canvas>
+                </div>
+                <div class="card-footer bg-white text-muted small">
+                    <ul class="list-unstyled mb-0">
+                        <li><i class="bi bi-circle-fill text-danger me-2"></i>Combustível: R$ {{ "%.2f"|format(abastecimento_total) }}</li>
+                        <li><i class="bi bi-circle-fill text-warning me-2"></i>C. Variáveis: R$ {{ "%.2f"|format(custo_var_total) }}</li>
+                        <li><i class="bi bi-circle-fill text-secondary me-2"></i>C. Fixos: R$ {{ "%.2f"|format(custo_fixo_total) }}</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Tratamento de UI do Filtro
+    const periodoSelect = document.getElementById('periodoSelect');
+    const customDates = document.querySelectorAll('.custom-date');
+
+    function toggleCustomDates() {
+        if (periodoSelect.value === 'personalizado') {
+            customDates.forEach(el => el.style.display = 'block');
+        } else {
+            customDates.forEach(el => el.style.display = 'none');
+        }
+    }
+
+    periodoSelect.addEventListener('change', toggleCustomDates);
+    toggleCustomDates(); // Init
+
+    // Dados do Backend injetados de forma segura
+    const labels = {{ labels | safe }};
+    const faturamentoData = {{ faturamento_diario | safe }};
+    const custosData = {{ custos_diarios | safe }};
+    const lucroData = {{ lucro_diario | safe }};
+
+    // 1. Gráfico de Evolução (Misto)
+    const ctxEvolucao = document.getElementById('evolucaoChart').getContext('2d');
+    new Chart(ctxEvolucao, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Faturamento',
+                    data: faturamentoData,
+                    backgroundColor: 'rgba(13, 110, 253, 0.7)',
+                    borderColor: 'rgb(13, 110, 253)',
+                    borderWidth: 1,
+                    order: 2
+                },
+                {
+                    label: 'Custos',
+                    data: custosData,
+                    backgroundColor: 'rgba(220, 53, 69, 0.7)',
+                    borderColor: 'rgb(220, 53, 69)',
+                    borderWidth: 1,
+                    order: 3
+                },
+                {
+                    label: 'Lucro Líquido',
+                    data: lucroData,
+                    type: 'line',
+                    borderColor: 'rgb(25, 135, 84)',
+                    backgroundColor: 'rgb(25, 135, 84)',
+                    borderWidth: 3,
+                    tension: 0.3,
+                    fill: false,
+                    order: 1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.dataset.label || '';
+                            if (label) {
+                                label += ': ';
+                            }
+                            if (context.parsed.y !== null) {
+                                label += new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(context.parsed.y);
+                            }
+                            return label;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value, index, values) {
+                            if(value >= 1000) return 'R$ ' + (value/1000).toFixed(1) + 'k';
+                            return 'R$ ' + value;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // 2. Gráfico de Composição de Custos (Rosca)
+    const valAbast = {{ abastecimento_total }};
+    const valVar = {{ custo_var_total }};
+    const valFixo = {{ custo_fixo_total }};
+
+    // Só monta o gráfico se houver custos
+    if (valAbast > 0 || valVar > 0 || valFixo > 0) {
+        const ctxCustos = document.getElementById('custosChart').getContext('2d');
+        new Chart(ctxCustos, {
+            type: 'doughnut',
+            data: {
+                labels: ['Combustível', 'Custos Variáveis', 'Custos Fixos'],
+                datasets: [{
+                    data: [valAbast, valVar, valFixo],
+                    backgroundColor: [
+                        'rgba(220, 53, 69, 0.8)',
+                        'rgba(255, 193, 7, 0.8)',
+                        'rgba(108, 117, 125, 0.8)'
+                    ],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false 
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed !== null) {
+                                    label += new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(context.parsed);
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    } else {
+        document.getElementById('custosChart').parentElement.innerHTML = '<p class="text-muted">Nenhum custo registrado no período.</p>';
+    }
+});
+</script>
+{% endblock %}
