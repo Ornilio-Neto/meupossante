@@ -5,10 +5,11 @@ from app import db, oauth
 from app.models import (
     User, Parametros, Custo, RegistroCusto,
     CategoriaCusto, CustoVariavel, LancamentoDiario,
-    Faturamento, Abastecimento, TipoCombustivel
+    Faturamento, Abastecimento, TipoCombustivel,
+    Receita, RegistroReceita
 )
 
-from .forms import LoginForm, RegistrationForm, CustoForm, RegistroCustoForm
+from .forms import LoginForm, RegistrationForm, CustoForm, RegistroCustoForm, ReceitaForm
 from urllib.parse import urlsplit
 from datetime import datetime, timedelta, date
 from sqlalchemy import extract, func
@@ -448,6 +449,42 @@ def dashboard():
         db.session.rollback()
         flash(f'Ocorreu um erro ao sincronizar os custos: {e}', 'danger')
 
+    # --- 2.5 SINCRONIZAÇÃO DE RECEITAS ---
+    try:
+        definicoes_receitas_ativas = Receita.query.filter_by(user_id=current_user.id, is_active=True).all()
+        for definicao in definicoes_receitas_ativas:
+            day_recebimento_correto = min(definicao.dia_recebimento, end_date_month.day)
+            data_recebimento_correta = date(year, month, day_recebimento_correto)
+            
+            registros_no_mes = RegistroReceita.query.filter(
+                RegistroReceita.receita_id == definicao.id,
+                extract('year', RegistroReceita.data_recebimento_esperada) == year,
+                extract('month', RegistroReceita.data_recebimento_esperada) == month
+            ).all()
+
+            registro_principal = None
+            registros_a_remover = []
+            for r in registros_no_mes:
+                if registro_principal is None:
+                    registro_principal = r
+                else:
+                    registros_a_remover.append(r)
+            for r in registros_a_remover:
+                if not r.recebido:
+                    db.session.delete(r)
+
+            if registro_principal is None:
+                db.session.add(RegistroReceita(
+                    data_recebimento_esperada=data_recebimento_correta, valor=definicao.valor,
+                    user_id=current_user.id, receita_id=definicao.id))
+            elif not registro_principal.recebido:
+                registro_principal.data_recebimento_esperada = data_recebimento_correta
+                registro_principal.valor = definicao.valor
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Ocorreu um erro ao sincronizar as receitas: {e}', 'danger')
+
     # --- 3. CÁLCULOS FINANCEIROS DO MÊS (LÓGICA CORRIGIDA) ---
     faturamento_bruto_real_mes = db.session.query(func.sum(Faturamento.valor)).filter(Faturamento.user_id == current_user.id, Faturamento.data.between(start_date_month, end_date_month)).scalar() or 0.0
     abastecimentos_mes = db.session.query(func.sum(Abastecimento.valor_total)).filter(Abastecimento.user_id == current_user.id, Abastecimento.data.between(start_date_month, end_date_month)).scalar() or 0.0
@@ -457,6 +494,12 @@ def dashboard():
     custos_fixos_pagos_mes = sum(rc.valor for rc in registros_custos_mes if rc.pago)
     custos_fixos_total_mes = sum(rc.valor for rc in registros_custos_mes)
     
+    registros_receitas_mes = RegistroReceita.query.join(Receita).filter(RegistroReceita.user_id == current_user.id, Receita.is_active == True, RegistroReceita.data_recebimento_esperada.between(start_date_month, end_date_month)).all()
+    receitas_fixas_recebidas_mes = sum(rr.valor for rr in registros_receitas_mes if rr.recebido)
+    
+    # Adiciona as receitas recorrentes recebidas no faturamento bruto
+    faturamento_bruto_real_mes += receitas_fixas_recebidas_mes
+
     # CORREÇÃO DO SALDO ATUAL: Garante que todos os custos (variáveis, abastecimento e fixos pagos) sejam debitados.
     saldo_atual_real = faturamento_bruto_real_mes - custos_variaveis_mes - abastecimentos_mes - custos_fixos_pagos_mes
 
@@ -513,8 +556,9 @@ def dashboard():
         faturamento_bruto_real_mes=faturamento_bruto_real_mes, saldo_atual_real=saldo_atual_real,
         meta_mensal_bruta=meta_mensal_configurada, projecao_lucro_operacional=projecao_lucro_operacional,
         extrato_diario=extrato_diario, registros_custos=registros_custos_mes,
+        registros_receitas=registros_receitas_mes,
         custos_fixos_total=custos_fixos_total_mes, current_month=month,
-        current_year=year, form=CustoForm()
+        current_year=year, form=CustoForm(), receita_form=ReceitaForm()
     )
 
 
@@ -562,6 +606,7 @@ def categorias():
 def cadastro():
     parametro_ativo = get_parametros_for_date(current_user, date.today())
     custo_form = CustoForm()
+    receita_form = ReceitaForm()
     has_abastecimentos = Abastecimento.query.filter_by(user_id=current_user.id).first() is not None
 
     if request.method == 'POST':
@@ -595,6 +640,35 @@ def cadastro():
                 db.session.add(novo_custo)
                 db.session.commit()
                 flash('Novo custo recorrente adicionado com sucesso!', 'success')
+            
+            return redirect(url_for('main.cadastro'))
+
+        # --- LÓGICA PARA SALVAR RECEITAS RECORRENTES ---
+        elif 'submit_receita' in request.form and receita_form.validate_on_submit():
+            receita_id = request.form.get('receita_id')
+            
+            if receita_id:
+                receita_para_editar = Receita.query.get(receita_id)
+                if receita_para_editar and receita_para_editar.user_id == current_user.id:
+                    receita_para_editar.nome = receita_form.nome.data
+                    receita_para_editar.valor = receita_form.valor.data
+                    receita_para_editar.dia_recebimento = receita_form.dia_recebimento.data
+                    receita_para_editar.observacao = receita_form.observacao.data
+                    db.session.commit()
+                    flash('Receita recorrente atualizada com sucesso!', 'success')
+                else:
+                    flash('Erro ao atualizar: Receita não encontrada ou permissão negada.', 'danger')
+            else:
+                nova_receita = Receita(
+                    nome=receita_form.nome.data,
+                    valor=receita_form.valor.data,
+                    dia_recebimento=receita_form.dia_recebimento.data,
+                    observacao=receita_form.observacao.data,
+                    user_id=current_user.id
+                )
+                db.session.add(nova_receita)
+                db.session.commit()
+                flash('Nova receita recorrente adicionada com sucesso!', 'success')
             
             return redirect(url_for('main.cadastro'))
 
@@ -651,9 +725,11 @@ def cadastro():
 
     # --- Lógica para carregar a página (método GET) ---
     custos_cadastrados = Custo.query.filter_by(user_id=current_user.id).order_by(Custo.nome).all()
+    receitas_cadastradas = Receita.query.filter_by(user_id=current_user.id).order_by(Receita.nome).all()
     return render_template(
         'cadastro.html', title='Cadastros e Parâmetros', parametro=parametro_ativo, 
-        custos=custos_cadastrados, custo_form=custo_form, is_initial_setup=(not has_abastecimentos)
+        custos=custos_cadastrados, custo_form=custo_form,
+        receitas=receitas_cadastradas, receita_form=receita_form, is_initial_setup=(not has_abastecimentos)
     )
 
 
@@ -709,6 +785,67 @@ def toggle_pago(registro_id):
     year = registro.data_vencimento.year
     month = registro.data_vencimento.month
     return redirect(url_for('main.dashboard', year=year, month=month))
+
+# --- TOGGLE RECEBIDO ---
+@bp.route('/receita/toggle_recebido/<int:registro_id>', methods=['POST'])
+@login_required
+def toggle_recebido(registro_id):
+    registro = RegistroReceita.query.get_or_404(registro_id)
+    if registro.user_id != current_user.id:
+        abort(403)
+    
+    registro.recebido = not registro.recebido
+    registro.data_recebimento = date.today() if registro.recebido else None
+    db.session.commit()
+
+    status = "recebido" if registro.recebido else "pendente"
+    flash(f'Receita "{registro.receita.nome}" marcada como {status}.', 'success')
+    
+    year = registro.data_recebimento_esperada.year
+    month = registro.data_recebimento_esperada.month
+    return redirect(url_for('main.dashboard', year=year, month=month))
+
+@bp.route('/receita/delete_definicao/<int:receita_id>', methods=['POST'])
+@login_required
+def delete_definicao_receita(receita_id):
+    receita = Receita.query.get_or_404(receita_id)
+    db.session.delete(receita)
+    db.session.commit()
+    flash('Definição de receita excluída!', 'success')
+    return redirect(url_for('main.cadastro'))
+
+@bp.route('/receita/edit_definicao/<int:receita_id>', methods=['GET', 'POST'])
+@login_required
+def edit_definicao_receita(receita_id):
+    receita = Receita.query.get_or_404(receita_id)
+    if receita.user_id != current_user.id:
+        abort(403)
+    
+    form = ReceitaForm(obj=receita)
+    if form.validate_on_submit():
+        receita.nome = form.nome.data
+        receita.valor = form.valor.data
+        receita.dia_recebimento = form.dia_recebimento.data
+        receita.observacao = form.observacao.data
+        db.session.commit()
+        flash('Definição de receita atualizada com sucesso!', 'success')
+        return redirect(url_for('main.cadastro'))
+
+    return render_template('edit_definicao_receita.html', form=form, receita=receita, title='Editar Receita')
+
+@bp.route('/receita/toggle_active/<int:receita_id>', methods=['POST'])
+@login_required
+def toggle_receita_active(receita_id):
+    receita = Receita.query.get_or_404(receita_id)
+    if receita.user_id != current_user.id:
+        abort(403)
+
+    receita.is_active = not receita.is_active
+    db.session.commit()
+
+    status = "ativa" if receita.is_active else "inativa"
+    flash(f'A receita recorrente "{receita.nome}" foi marcada como {status}.', 'success')
+    return redirect(url_for('main.cadastro'))
 
 
 

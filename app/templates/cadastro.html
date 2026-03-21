@@ -143,6 +143,106 @@
     </div>
   </div>
 
+  <!-- Cadastro de Receitas Recorrentes -->
+  <div class="card mb-4 border-success">
+    <div class="card-header bg-success text-white">
+      <h3 class="mb-0">Cadastrar Nova Receita Recorrente</h3>
+    </div>
+    <div class="card-body">
+      <form method="POST" action="{{ url_for('main.cadastro') }}">
+        <input type="hidden" name="form_name" value="receitas">
+        {{ receita_form.hidden_tag() }}
+
+        <div class="row g-3">
+          <div class="col-md-6">
+            {{ receita_form.nome.label(class="form-label") }}
+            {{ receita_form.nome(class="form-control") }}
+          </div>
+
+          <div class="col-md-3">
+            {{ receita_form.valor.label(class="form-label") }}
+            {{ receita_form.valor(class="form-control", placeholder="Ex: 150,50") }}
+          </div>
+
+          <div class="col-md-3">
+            {{ receita_form.dia_recebimento.label(class="form-label") }}
+            {{ receita_form.dia_recebimento(class="form-control", min=1, max=31) }}
+          </div>
+
+          <div class="col-md-12">
+            {{ receita_form.observacao.label(class="form-label") }}
+            {{ receita_form.observacao(class="form-control") }}
+          </div>
+        </div>
+
+        <div class="mt-3">
+          <button type="submit" name="submit_receita" class="btn btn-success">
+            Cadastrar Receita
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Lista de Receitas -->
+  <div class="card mb-4">
+    <div class="card-header">
+      <h3 class="mb-0">Receitas Recorrentes Cadastradas</h3>
+    </div>
+    <div class="card-body table-responsive">
+      <table class="table table-striped table-hover align-middle">
+        <thead>
+          <tr>
+            <th>Nome</th>
+            <th>Valor</th>
+            <th>Recebimento</th>
+            <th class="text-center">Status</th>
+            <th>Observação</th>
+            <th class="text-center">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for receita in receitas %}
+            <tr class="{% if not receita.is_active %}text-muted{% endif %}">
+              <td class="fw-bold">{{ receita.nome }}</td>
+              <td class="text-success">R$ {{ "%.2f"|format(receita.valor) }}</td>
+              <td>Dia {{ receita.dia_recebimento }}</td>
+              <td class="text-center">
+                {% if receita.is_active %}
+                  <span class="badge bg-success">Ativa</span>
+                {% else %}
+                  <span class="badge bg-secondary">Inativa</span>
+                {% endif %}
+              </td>
+              <td>{{ receita.observacao }}</td>
+              <td class="text-center text-nowrap">
+                <form method="POST" action="{{ url_for('main.toggle_receita_active', receita_id=receita.id) }}" style="display:inline">
+                  {% if receita.is_active %}
+                    <button type="submit" class="btn btn-sm btn-outline-warning" title="Desativar Receita">⏸️</button>
+                  {% else %}
+                    <button type="submit" class="btn btn-sm btn-outline-success" title="Ativar Receita">▶️</button>
+                  {% endif %}
+                </form>
+                
+                <a href="{{ url_for('main.edit_definicao_receita', receita_id=receita.id) }}" class="btn btn-sm btn-outline-primary" title="Editar Receita">✏️</a>
+                
+                <form method="POST" action="{{ url_for('main.delete_definicao_receita', receita_id=receita.id) }}" style="display:inline" onsubmit="return confirm('ATENÇÃO! Deseja excluir permanentemente esta receita e TODOS os seus registros passados e futuros? Esta ação não pode ser desfeita.');">
+                  <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir Receita">🗑️</button>
+                </form>
+              </td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="6" class="text-center">
+                Nenhuma receita cadastrada.
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
   <!-- Cadastro de Custos -->
   <div class="card mb-4">
     <div class="card-header">
@@ -176,7 +276,7 @@
         </div>
 
         <div class="mt-3">
-          <button type="submit" class="btn btn-secondary">
+          <button type="submit" name="submit_custo" class="btn btn-secondary">
             Cadastrar Custo
           </button>
         </div>

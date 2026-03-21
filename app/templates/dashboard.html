@@ -197,9 +197,9 @@ content %} {% set months = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio',
 
     <!-- Custos Fixos -->
     <div class="col-lg-4 mb-4">
-      <div class="card">
-        <div class="card-header">
-          Custos Fixos do Mês (R$ {{ "%.2f"|format(custos_fixos_total) }})
+      <div class="card border-danger">
+        <div class="card-header bg-danger text-white">
+          <h5 class="mb-0">Custos Fixos (R$ {{ "%.2f"|format(custos_fixos_total) }})</h5>
         </div>
         <div class="card-body p-0" style="max-height: 400px; overflow-y: auto">
           <ul class="list-group list-group-flush">
@@ -250,13 +250,77 @@ content %} {% set months = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio',
             </li>
             {% endif %} {% else %}
             <li class="list-group-item text-center text-muted">
-              Nenhum custo fixo gerado para este mês.
+              Nenhum custo fixo para este mês.
             </li>
             {% endfor %}
           </ul>
         </div>
       </div>
     </div>
+    
+    <!-- Receitas Recorrentes -->
+    <div class="col-lg-4 mb-4">
+      <div class="card border-success">
+        <div class="card-header bg-success text-white">
+          <h5 class="mb-0">Receitas Recorrentes</h5>
+        </div>
+        <div class="card-body p-0" style="max-height: 400px; overflow-y: auto">
+          <ul class="list-group list-group-flush">
+            {% for registro in registros_receitas %} {% if
+            registro.receita.is_active %}
+            <li
+              class="list-group-item d-flex justify-content-between align-items-center"
+            >
+              <div>
+                <span class="fw-bold">{{ registro.receita.nome }}</span>
+                <small class="d-block text-muted"
+                  >Recebe: {{ registro.data_recebimento_esperada.strftime('%d/%m')
+                  }}</small
+                >
+              </div>
+              <div class="text-end">
+                <span
+                  class="badge {% if registro.recebido %}bg-success{% else %}bg-secondary{% endif %} rounded-pill mb-1"
+                >
+                  R$ {{ "%.2f"|format(registro.valor) }}
+                </span>
+
+                <!-- BOTÃO DE RECEBIMENTO -->
+                <form
+                  method="POST"
+                  action="{{ url_for('main.toggle_recebido', registro_id=registro.id) }}"
+                  style="display: inline"
+                >
+                  {% if registro.recebido %}
+                  <button
+                    type="submit"
+                    class="btn btn-sm btn-outline-warning"
+                    title="Marcar como Pendente"
+                  >
+                    Desfazer
+                  </button>
+                  {% else %}
+                  <button
+                    type="submit"
+                    class="btn btn-sm btn-success"
+                    title="Marcar como Recebido"
+                  >
+                    Receber
+                  </button>
+                  {% endif %}
+                </form>
+              </div>
+            </li>
+            {% endif %} {% else %}
+            <li class="list-group-item text-center text-muted">
+              Nenhuma receita recorrente para este mês.
+            </li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+    </div>
+
   </div>
   {% endif %}
 </div>

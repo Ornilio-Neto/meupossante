@@ -33,3 +33,10 @@ class RegistroCustoForm(FlaskForm):
     registro_id = HiddenField('Registro ID', validators=[DataRequired()])
     pago = BooleanField('Pago')
     submit = SubmitField('Atualizar')
+
+class ReceitaForm(FlaskForm):
+    nome = StringField('Nome da Receita', validators=[DataRequired()])
+    valor = FloatField('Valor Padrão (R$)', validators=[DataRequired(), NumberRange(min=0)])
+    dia_recebimento = IntegerField('Dia do Recebimento (1-31)', validators=[DataRequired(), NumberRange(min=1, max=31)])
+    observacao = TextAreaField('Observações', validators=[Optional()])
+    submit = SubmitField('Salvar Receita')

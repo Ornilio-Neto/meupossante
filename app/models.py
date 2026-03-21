@@ -17,6 +17,8 @@ class User(UserMixin, db.Model):
     parametros = db.relationship('Parametros', backref='user', lazy='dynamic', cascade="all, delete-orphan")
     custos = db.relationship('Custo', backref='user', lazy='dynamic', cascade="all, delete-orphan")
     registros_custo = db.relationship('RegistroCusto', backref='user', lazy='dynamic', cascade="all, delete-orphan")
+    receitas = db.relationship('Receita', backref='user', lazy='dynamic', cascade="all, delete-orphan")
+    registros_receita = db.relationship('RegistroReceita', backref='user', lazy='dynamic', cascade="all, delete-orphan")
     lancamentos_diarios = db.relationship('LancamentoDiario', backref='user', lazy='dynamic', cascade="all, delete-orphan")
     faturamentos = db.relationship('Faturamento', backref='user', lazy='dynamic', cascade="all, delete-orphan")
     custos_variaveis = db.relationship('CustoVariavel', backref='user', lazy='dynamic', cascade="all, delete-orphan")
@@ -134,3 +136,26 @@ class RegistroCusto(db.Model):
     metodo_pagamento = db.Column(db.String(50), nullable=True)
     observacao = db.Column(db.Text, nullable=True)
     __table_args__ = (db.UniqueConstraint('custo_id', 'data_vencimento', name='_custo_vencimento_uc'),)
+
+class Receita(db.Model):
+    __tablename__ = 'receita'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    nome = db.Column(db.String(120), nullable=False)
+    valor = db.Column(db.Float, nullable=False)
+    dia_recebimento = db.Column(db.Integer, nullable=False)
+    observacao = db.Column(db.Text, nullable=True)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    registros = db.relationship('RegistroReceita', backref='receita', lazy='dynamic', cascade="all, delete-orphan")
+
+class RegistroReceita(db.Model):
+    __tablename__ = 'registro_receita'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    receita_id = db.Column(db.Integer, db.ForeignKey('receita.id'), nullable=False, index=True)
+    data_recebimento_esperada = db.Column(db.Date, nullable=False, index=True)
+    valor = db.Column(db.Float, nullable=False)
+    recebido = db.Column(db.Boolean, default=False, nullable=False)
+    data_recebimento = db.Column(db.Date, nullable=True)
+    observacao = db.Column(db.Text, nullable=True)
+    __table_args__ = (db.UniqueConstraint('receita_id', 'data_recebimento_esperada', name='_receita_recebimento_uc'),)
